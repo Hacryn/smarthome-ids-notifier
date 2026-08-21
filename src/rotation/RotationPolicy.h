@@ -2,9 +2,9 @@
 
 #include <stdint.h>
 
-// Sez. 9.1 - periodo di validita' di default (non ancora configurabile da
-// comando: arrivera' con /setretention in una fase successiva, come gia'
-// per altre soglie, es. kNetworkIssueThresholdSec).
+// Sez. 9.1 - periodo di validita' di default; il valore effettivo vive in
+// GlobalConfig (sez. 11.1, comando /setretention), questo resta solo il
+// default con cui GlobalConfig viene inizializzato.
 constexpr uint32_t kDefaultRetentionWeeks = 52;
 constexpr uint32_t kSecondsPerWeek = 7UL * 24UL * 3600UL;
 

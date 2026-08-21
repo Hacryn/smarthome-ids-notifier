@@ -18,5 +18,5 @@ void initPinMonitor();
 // invocando onTransition per ciascun elemento. Ritorna il numero di elementi.
 size_t drainPinTransitions(void (*onTransition)(const PinTransition&));
 
-// Contatore di overflow della coda ISR, esposto in /status in una fase successiva.
+// Contatore di overflow della coda ISR, esposto in /status (sez. 12.2).
 uint32_t pinQueueOverflowCount();

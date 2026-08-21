@@ -2,12 +2,14 @@
 
 #include <string.h>
 
+#include <map>
 #include <string>
 
 #include "../config/GlobalConfigStorage.h"
 #include "../config/TimestampFormatter.h"
 #include "../config/UserConfig.h"
 #include "../config/UserConfigStorage.h"
+#include "../events/EventAggregator.h"
 #include "../events/EventLogStorage.h"
 #include "../rotation/RotationEngine.h"
 #include "../telegram/RateLimiter.h"
@@ -43,9 +45,6 @@ void setEventId(OutboundMessage& msg, const char* id) {
   msg.eventId[32] = '\0';
 }
 
-// NOTA: l'aggregazione START+END con durata come nell'esempio di sez. 6.7
-// non e' replicata qui - quella logica arriva con /log (sez. 12.1), che
-// la implementera' una sola volta e verra' riusata.
 std::string buildEventMessageText(const char* label, EventStatus status,
                                    const std::string& formattedTs) {
   std::string text = label;
@@ -67,12 +66,44 @@ std::string buildRecoveryMessageText(const char* label, const std::string& forma
   return text;
 }
 
+// Sez. 6.7 - raggruppa per id, cosi' una coppia START+END pendenti insieme
+// finisce su una sola riga con la durata, come nell'esempio del documento
+// (stessa logica di accoppiamento gia' scritta per /log in EventAggregator,
+// qui riscritta perche' opera su NotificationRecord/NotifyStatus - sez. 7.2 -
+// invece che su EventRecord/EventStatus di log.jsonl).
 std::string buildAggregatedMessageText(const std::vector<NotificationRecord>& pending,
                                         const UserConfig& userCfg) {
-  std::string text = "[recuperate] " + std::to_string(pending.size()) + " notifiche:\n";
+  struct Group {
+    const NotificationRecord* start = nullptr;
+    const NotificationRecord* end = nullptr;
+    const NotificationRecord* instant = nullptr;
+  };
+
+  std::vector<std::string> order;  // prima apparizione, per un rendering stabile
+  std::map<std::string, Group> groups;
+
   for (const auto& rec : pending) {
+    std::string id(rec.id);
+    if (groups.find(id) == groups.end()) order.push_back(id);
+
+    Group& g = groups[id];
+    if (rec.status == NotifyStatus::NOTIFIED_START) {
+      g.start = &rec;
+    } else if (rec.status == NotifyStatus::NOTIFIED_END) {
+      g.end = &rec;
+    } else {
+      g.instant = &rec;
+    }
+  }
+
+  std::string text = "[recuperate] " + std::to_string(pending.size()) + " notifiche:\n";
+  for (const auto& id : order) {
+    const Group& g = groups[id];
+    const NotificationRecord* anyRec = g.start ? g.start : (g.end ? g.end : g.instant);
+    NotifyStatus lookupStatus = anyRec->status;
+
     EventRecord original{};
-    bool found = findEventRecordById(rec.id, notifyStatusToEventStatus(rec.status), original);
+    bool found = findEventRecordById(anyRec->id, notifyStatusToEventStatus(lookupStatus), original);
     const char* label = "Evento";
     bool approx = true;
     if (found) {
@@ -80,9 +111,22 @@ std::string buildAggregatedMessageText(const std::vector<NotificationRecord>& pe
       if (cfg) label = cfg->label;
       approx = original.approx;
     }
+
     text += "- ";
     text += label;
-    text += " (" + formatTimestampForUser(rec.ts, userCfg, approx) + ")\n";
+    text += " ";
+    if (g.instant) {
+      text += formatTimestampForUser(g.instant->ts, userCfg, approx);
+    } else if (g.start && g.end) {
+      text += formatTimestampForUser(g.start->ts, userCfg, approx) + " -> " +
+              formatTimestampForUser(g.end->ts, userCfg, approx) + " (" +
+              formatDurationSeconds(g.end->ts - g.start->ts) + ")";
+    } else if (g.start) {
+      text += formatTimestampForUser(g.start->ts, userCfg, approx) + " -> APERTO";
+    } else {
+      text += "-> " + formatTimestampForUser(g.end->ts, userCfg, approx);
+    }
+    text += "\n";
   }
   return text;
 }

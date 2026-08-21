@@ -18,5 +18,5 @@ class FsErrorCounter {
 };
 
 // Istanza globale condivisa da tutti i moduli di scrittura su LittleFS,
-// esposta anche in /status in una fase successiva.
+// esposta anche in /status (sez. 12.2).
 FsErrorCounter& fsErrorCounter();

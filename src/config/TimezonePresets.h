@@ -17,7 +17,7 @@ enum class TimezonePreset : uint8_t {
 
 struct TimezonePresetInfo {
   TimezonePreset preset;
-  const char* name;     // usato dal comando /settimezone (fase successiva)
+  const char* name;     // usato dal comando /settimezone (sez. 12)
   const char* posixTz;  // sez. 10.1/10.2 - gestisce DST automaticamente
 };
 
