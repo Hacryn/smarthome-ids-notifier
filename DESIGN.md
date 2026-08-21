@@ -69,12 +69,12 @@ Il sistema deve supportare più tipologie di evento, estensibili in futuro. Ogni
 
 | Valore enum `type` | Tipologia | Natura | Notifica inviata |
 |---|---|---|---|
-| `0` | `ALARM_GENERAL` — allarme generale | Con durata (`START`/`END`) | `START` e `END` |
-| `1` | `ALARM_INTERNAL` — allarme interno | Con durata (`START`/`END`) | `START` e `END` |
-| `2` | `ALARM_GARAGE` — allarme garage | Con durata (`START`/`END`) | `START` e `END` |
-| `3` | `POWER_LOSS` — interruzione di corrente (mancanza rete 230V) | Con durata (`START`/`END`) | `START` e `END` |
-| `4` | `REBOOT` — riavvio dell'Arduino | Istantaneo (`INSTANT`) | `INSTANT` |
-| `5` | `NETWORK_ISSUE` — problema di connettività di rete | Con durata (`START`/`END`) | **solo `END`** (vedi 3.2.3) |
+| `0` | `REBOOT` — riavvio dell'Arduino | Istantaneo (`INSTANT`) | `INSTANT` |
+| `1` | `POWER_LOSS` — interruzione di corrente (mancanza rete 230V) | Con durata (`START`/`END`) | `START` e `END` |
+| `2` | `NETWORK_ISSUE` — problema di connettività di rete | Con durata (`START`/`END`) | **solo `END`** (vedi 3.2.3) |
+| `10` | `ALARM_GENERAL` — allarme generale | Con durata (`START`/`END`) | `START` e `END` |
+| `11` | `ALARM_INTERNAL` — allarme interno | Con durata (`START`/`END`) | `START` e `END` |
+| `12` | `ALARM_GARAGE` — allarme garage | Con durata (`START`/`END`) | `START` e `END` |
 
 *(altre tipologie aggiungibili in coda alla enumerazione, senza rompere la compatibilità con i log esistenti — non riutilizzare/rinumerare valori già assegnati)*
 
@@ -474,9 +474,9 @@ Lo scopo del registro è tracciare **se il messaggio è stato inviato con succes
 
   | Valore | Significato |
   |---|---|
-  | `0` | `NOTIFIED_START` |
-  | `1` | `NOTIFIED_END` |
-  | `2` | `NOTIFIED_INSTANT` |
+  | `0` | `NOTIFIED_INSTANT` |
+  | `1` | `NOTIFIED_START` |
+  | `2` | `NOTIFIED_END` |
 
 - **`ts`**: per una riga `PENDING`, l'epoch dell'evento originale (utile per il calcolo del grace period); per una riga `RESOLVED`, l'epoch del momento dell'invio effettivo andato a buon fine; per una riga `ABANDONED`, l'epoch della rinuncia.
 - **`state`**: enum numerico:
@@ -715,10 +715,10 @@ Chiavi NVS di servizio, non modificabili da comando: `schema_ver` (5.5), `last_e
 | `/setmaxretries <n>` | Admin | Imposta il numero di tentativi oltre il quale una notifica è abbandonata |
 | `/setnetthreshold <secondi>` | Admin | Imposta la durata minima di un down di connettività perché generi un evento |
 | `/closeevent <id> [timestamp]` | Admin | Chiude manualmente un evento rimasto aperto (fallback testuale dei bottoni inline, vedi 8.1) |
-| *Aggiunta utente* (nome comando da definire) | Admin | Aggiunge un nuovo `chat_id` alla whitelist |
-| *Rimozione utente* (nome comando da definire) | Admin | Rimuove un `chat_id` dalla whitelist |
-| *Promozione/rimozione admin* (nome comando da definire) | Admin | Modifica il flag `admin` di un utente esistente |
-| *Reset whitelist* (nome comando da definire) | Admin | Svuota la whitelist (operazione distruttiva, da proteggere con conferma) |
+| `/adduser <chat_id>` | Admin | Aggiunge un nuovo `chat_id` alla whitelist |
+| `/removeuser <chat_id>` | Admin | Rimuove un `chat_id` dalla whitelist |
+| `/promoteuser <chat_id>` | Admin | Modifica il flag `admin` di un utente esistente andando a promuovere ad `Admin` |
+| `/resetusers <chat_id>` | Admin | Svuota la whitelist riportardola ai valori di default (operazione distruttiva, da proteggere con conferma) |
 
 ### 12.1 Rendering di `/log`
 
