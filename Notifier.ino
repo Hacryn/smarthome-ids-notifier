@@ -1,6 +1,7 @@
 #include <LittleFS.h>
 
 #include "secrets.h"
+#include "src/config/GlobalConfigStorage.h"
 #include "src/events/EventId.h"
 #include "src/events/EventLogStorage.h"
 #include "src/events/EventTiming.h"
@@ -14,7 +15,7 @@
 #include "src/rotation/FsErrorCounter.h"
 #include "src/rotation/RotationEngine.h"
 #include "src/telegram/CallbackData.h"
-#include "src/telegram/CommandParser.h"
+#include "src/telegram/CommandRouter.h"
 #include "src/telegram/TelegramClient.h"
 #include "src/time/TimeAnchor.h"
 #include "src/time/TimeAnchorStorage.h"
@@ -24,10 +25,6 @@
 // Sez. 9 - manutenzione periodica (spazio + rotazione dovuta), non ad ogni
 // ciclo di loop.
 constexpr uint32_t kMaintenanceIntervalMs = 10UL * 60UL * 1000UL;
-
-// Sez. 3.4.1 - soglia di durata minima per generare NETWORK_ISSUE (non ancora
-// configurabile da comando: arrivera' con /setnetthreshold in una fase successiva).
-constexpr uint32_t kNetworkIssueThresholdSec = 120;
 
 // Sez. 3.3 - un debouncer per voce di EVENT_TYPES (le voci senza pin restano inutilizzate).
 PinDebouncer g_debouncers[EVENT_TYPES_COUNT];
@@ -73,20 +70,6 @@ void onTelegramCallback(const IncomingCallback& cb) {
   bool closed = closeOpenEvent(g_users, id, estimateTimestamp(g_lastEpochAnchor, millis()),
                                 g_lastWrittenTs);
   answerCallback(cb.queryId, closed ? "Evento chiuso" : "Evento gia' chiuso o non trovato");
-}
-
-// Sez. 8.1 - fallback testuale /closeevent, riservato agli admin (sez. 4.3).
-void onTelegramCommand(const IncomingCommand& cmd) {
-  if (!isAdmin(g_users, cmd.chatId)) return;
-
-  std::string id;
-  bool hasTs = false;
-  uint32_t ts = 0;
-  if (!parseCloseEventCommand(cmd.text, id, hasTs, ts)) return;
-
-  uint32_t closeTs = hasTs ? ts : estimateTimestamp(g_lastEpochAnchor, millis());
-  bool closed = closeOpenEvent(g_users, id, closeTs, g_lastWrittenTs);
-  sendTelegramMessage(cmd.chatId, closed ? "Evento chiuso" : "Evento gia' chiuso o non trovato");
 }
 
 void logNetworkIssueEvent(EventStatus status, uint32_t rawTs) {
@@ -147,10 +130,14 @@ void setup() {
   // interrotta da un blackout.
   cleanupStaleRotationFiles(g_users);
 
+  // Sez. 11.1 - configurazioni globali (default se non ancora presenti in NVS).
+  initGlobalConfigStore();
+
   initPinMonitor();
   initWifi(WIFI_SSID, WIFI_PASSWORD);
   initTelegramClient(TELEGRAM_BOT_TOKEN);
-  setTelegramUpdateHandlers(onTelegramCallback, onTelegramCommand);
+  initCommandRouter(g_users, g_lastEpochAnchor, g_lastWrittenTs);
+  setTelegramUpdateHandlers(onTelegramCallback, handleIncomingCommand);
 }
 
 void loop() {
@@ -193,8 +180,8 @@ void loop() {
   // raggiungibilita' delle API Telegram, non solo lo stato WiFi. Per ora
   // NETWORK_ISSUE si basa unicamente sullo stato della connessione WiFi.
   bool reachable = isWifiConnected();
-  NetworkIssueEvent netEv =
-      g_networkIssueTracker.update(reachable, nowMillis, epochNow, kNetworkIssueThresholdSec);
+  NetworkIssueEvent netEv = g_networkIssueTracker.update(
+      reachable, nowMillis, epochNow, globalConfig().networkIssueThresholdSec);
   if (netEv.kind == NetworkIssueEvent::Kind::STARTED) {
     logNetworkIssueEvent(EventStatus::START, netEv.ts);
   } else if (netEv.kind == NetworkIssueEvent::Kind::ENDED) {
@@ -213,13 +200,13 @@ void loop() {
       g_needsFsFormatAlert = false;
     }
     // Sez. 9 - verifica dello spazio ed eventuale rotazione, anche al boot.
-    performMaintenanceIfDue(g_users, epochNow, kDefaultRetentionWeeks);
+    performMaintenanceIfDue(g_users, epochNow, globalConfig().retentionWeeks);
     g_bootTasksDone = true;
   }
 
   if (nowMillis - g_lastMaintenanceMillis >= kMaintenanceIntervalMs) {
     // Sez. 9.2/9.4 - verifica periodica di spazio e cadenza di rotazione.
-    performMaintenanceIfDue(g_users, epochNow, kDefaultRetentionWeeks);
+    performMaintenanceIfDue(g_users, epochNow, globalConfig().retentionWeeks);
     g_lastMaintenanceMillis = nowMillis;
   }
 

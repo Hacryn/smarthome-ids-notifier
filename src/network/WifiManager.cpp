@@ -40,3 +40,9 @@ void tickWifi(uint32_t nowMillis) {
 }
 
 bool isWifiConnected() { return WiFi.status() == WL_CONNECTED; }
+
+std::string wifiSsid() { return std::string(WiFi.SSID().c_str()); }
+
+int wifiRssi() { return WiFi.RSSI(); }
+
+uint32_t wifiCurrentBackoffAttempt() { return g_attemptNumber; }

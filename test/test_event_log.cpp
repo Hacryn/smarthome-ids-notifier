@@ -80,6 +80,14 @@ static void test_event_type_table_lookup() {
   assert(rebootCfg->notify_policy == NotifyPolicy::INSTANT);
 }
 
+static void test_event_type_lookup_by_command_name() {
+  const EventTypeConfig* cfg = findEventTypeConfigByCommandName("ALARM_GARAGE");
+  assert(cfg != nullptr);
+  assert(cfg->type == EventType::ALARM_GARAGE);
+
+  assert(findEventTypeConfigByCommandName("NOT_A_TYPE") == nullptr);
+}
+
 static void test_should_notify_for_status() {
   // sez. 3.2.3 - NETWORK_ISSUE notifica solo END.
   assert(!shouldNotifyForStatus(NotifyPolicy::ONLY_END, EventStatus::START));
@@ -101,6 +109,7 @@ int main() {
   test_parse_rejects_missing_field();
   test_parse_rejects_wrong_id_length();
   test_event_type_table_lookup();
+  test_event_type_lookup_by_command_name();
   test_should_notify_for_status();
 
   printf("test_event_log: tutti i test superati\n");

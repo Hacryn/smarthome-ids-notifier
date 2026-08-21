@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "../config/GlobalConfigStorage.h"
 #include "../config/TimestampFormatter.h"
 #include "../config/UserConfig.h"
 #include "../config/UserConfigStorage.h"
@@ -35,6 +36,7 @@ RetryTimer g_retryTimer;
 
 uint32_t g_scanMessagesInFlight = 0;
 bool g_scanHadPendingResult = false;
+std::string g_lastSystemError;  // sez. 12.2 - esposto in /status
 
 void setEventId(OutboundMessage& msg, const char* id) {
   memcpy(msg.eventId, id, 32);
@@ -122,14 +124,18 @@ bool handleSendOutcome(const std::vector<AuthorizedUser>& users, const OutboundM
       notifyAdmins(users, "Notifica abbandonata (destinatario irraggiungibile): chat_id=" +
                                std::to_string(msg.chatId));
     } else {
+      if (outcome == SendOutcomeCategory::SYSTEM_ERROR) {
+        g_lastSystemError = "Errore di sistema nell'invio (es. token non valido)";
+      }
+
       uint32_t newCount = msg.attemptCountBefore + 1;
-      if (exceedsMaxRetries(newCount, kMaxRetries)) {
+      if (exceedsMaxRetries(newCount, globalConfig().maxRetries)) {
         writeNotificationState(msg, NotifyState::ABANDONED, newCount, nowEpoch);
       } else {
         writeNotificationState(msg, NotifyState::PENDING, newCount, nowEpoch);
         stillPending = true;
         if (!msg.isScanMessage) {
-          g_retryTimer.onTransientFailure(nowMillis, kRetryIntervalMs);
+          g_retryTimer.onTransientFailure(nowMillis, globalConfig().retryIntervalMinutes * 60000UL);
         }
       }
     }
@@ -154,6 +160,10 @@ void notifyAdmins(const std::vector<AuthorizedUser>& users, const std::string& t
     g_queue.push_back(msg);
   }
 }
+
+bool isRetryTimerActive() { return g_retryTimer.isActive(); }
+
+std::string lastSystemError() { return g_lastSystemError; }
 
 void notifyEvent(const std::vector<AuthorizedUser>& users, const char* id, EventType type,
                   EventStatus status, uint32_t eventTs, bool eventApprox) {
@@ -199,7 +209,7 @@ void runRecoveryScan(const std::vector<AuthorizedUser>& users, uint32_t nowMilli
 
     UserConfig userCfg = findOrDefaultUserConfig(userConfigs, user.chatId);
 
-    if (shouldAggregate(pending.size(), kAggregateThreshold)) {
+    if (shouldAggregate(pending.size(), globalConfig().aggregateThreshold)) {
       // Sez. 6.7 - un unico messaggio; il tracciamento resta individuale per voce.
       std::string text = buildAggregatedMessageText(pending, userCfg);
       for (const auto& rec : pending) {
@@ -224,7 +234,8 @@ void runRecoveryScan(const std::vector<AuthorizedUser>& users, uint32_t nowMilli
           const EventTypeConfig* cfg = findEventTypeConfig(original.type);
           if (cfg) label = cfg->label;
         }
-        RecoveryPresentation pres = decideRecoveryPresentation(nowEpoch, rec.ts, approx, kGracePeriodSec);
+        RecoveryPresentation pres =
+            decideRecoveryPresentation(nowEpoch, rec.ts, approx, globalConfig().gracePeriodSec);
         std::string formattedTs = formatTimestampForUser(rec.ts, userCfg, pres.isApprox);
 
         OutboundMessage msg;
@@ -259,7 +270,8 @@ void tickNotificationEngine(const std::vector<AuthorizedUser>& users, uint32_t n
     bool triggerScan = handleSendOutcome(users, msg, outcome, nowMillis, nowEpoch);
 
     if (msg.isScanMessage && g_scanMessagesInFlight == 0 && g_retryTimer.scanInProgress()) {
-      g_retryTimer.endScan(!g_scanHadPendingResult, nowMillis, kRetryIntervalMs);
+      g_retryTimer.endScan(!g_scanHadPendingResult, nowMillis,
+                           globalConfig().retryIntervalMinutes * 60000UL);
     }
 
     if (triggerScan) {

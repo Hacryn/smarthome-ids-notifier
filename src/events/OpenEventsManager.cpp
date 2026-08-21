@@ -3,6 +3,7 @@
 #include <LittleFS.h>
 #include <string.h>
 
+#include "../config/GlobalConfigStorage.h"
 #include "../config/TimestampFormatter.h"
 #include "../config/UserConfig.h"
 #include "../config/UserConfigStorage.h"
@@ -110,7 +111,8 @@ void sendOpenEventsSummary(const std::vector<AuthorizedUser>& users) {
     std::vector<NotificationRecord> nearAbandonment;
     for (const auto& entry : state) {
       const NotificationRecord& rec = entry.second;
-      if (rec.state == NotifyState::PENDING && isNearAbandonment(rec.n, kMaxRetries)) {
+      if (rec.state == NotifyState::PENDING &&
+          isNearAbandonment(rec.n, globalConfig().maxRetries)) {
         nearAbandonment.push_back(rec);
       }
     }
