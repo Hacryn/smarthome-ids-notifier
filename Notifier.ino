@@ -7,9 +7,9 @@
 #include "src/events/EventTypes.h"
 #include "src/network/NetworkIssueTracker.h"
 #include "src/network/WifiManager.h"
+#include "src/notifications/NotificationEngine.h"
 #include "src/pins/PinDebounce.h"
 #include "src/pins/PinMonitor.h"
-#include "src/telegram/RateLimiter.h"
 #include "src/telegram/TelegramClient.h"
 #include "src/time/TimeAnchor.h"
 #include "src/time/TimeAnchorStorage.h"
@@ -29,18 +29,11 @@ uint32_t g_lastWrittenTs = 0;
 
 NetworkIssueTracker g_networkIssueTracker;
 
-// Fase 6 - smoke test: un solo invio alla prima connessione WiFi, per
-// verificare manualmente client/classificazione (nessuna coda ancora: arriva
-// in fase 8). RateLimiter usato qui a scopo dimostrativo (un solo invio non
-// lo esercita davvero).
-RateLimiter g_telegramRateLimiter;
-bool g_bootMessageSent = false;
-
-// Sez. 4 - whitelist utenti autorizzati. Il controllo effettivo sui comandi
-// in arrivo (ignorare silenziosamente i non autorizzati) e sull'invio delle
-// notifiche arrivera' con la gestione comandi/notifiche (fasi successive);
-// qui e' cablato solo l'onboarding del primo admin.
+// Sez. 4 - whitelist utenti autorizzati.
 std::vector<AuthorizedUser> g_users;
+
+// Sez. 6.2 - scansione di recupero una tantum alla prima connessione WiFi (boot).
+bool g_bootRecoveryScanDone = false;
 
 void handleRawTransition(const PinTransition& t) {
   g_debouncers[t.eventTypeIndex].onTransition(t.level, t.millisAtIsr);
@@ -58,6 +51,11 @@ void logNetworkIssueEvent(EventStatus status, uint32_t rawTs) {
 
   if (appendEventRecord(rec)) {
     g_lastWrittenTs = clamped.ts;
+
+    const EventTypeConfig* cfg = findEventTypeConfig(EventType::NETWORK_ISSUE);
+    if (cfg && shouldNotifyForStatus(cfg->notify_policy, rec.status)) {
+      notifyEvent(g_users, rec.id, rec.type, rec.status, rec.ts, rec.approx);
+    }
   }
 }
 
@@ -115,6 +113,10 @@ void loop() {
 
     if (appendEventRecord(rec)) {
       g_lastWrittenTs = clamped.ts;
+
+      if (shouldNotifyForStatus(cfg.notify_policy, rec.status)) {
+        notifyEvent(g_users, rec.id, rec.type, rec.status, rec.ts, rec.approx);
+      }
     }
   }
 
@@ -130,12 +132,15 @@ void loop() {
     logNetworkIssueEvent(EventStatus::START, netEv.ts);
   } else if (netEv.kind == NetworkIssueEvent::Kind::ENDED) {
     logNetworkIssueEvent(EventStatus::END, netEv.ts);
+    // Sez. 6.2 - scansione di recupero al ripristino della connettivita'.
+    runRecoveryScan(g_users, nowMillis, epochNow);
   }
 
-  if (!g_bootMessageSent && reachable && g_telegramRateLimiter.tryConsume(nowMillis)) {
-    SendOutcomeCategory result = sendTelegramMessage(ONBOARDING_CHAT_ID, "Notifier online (test fase 6)");
-    Serial.print("Test invio Telegram, categoria esito=");
-    Serial.println(static_cast<int>(result));
-    g_bootMessageSent = true;
+  if (!g_bootRecoveryScanDone && reachable) {
+    // Sez. 6.2 - scansione di recupero al boot, una tantum.
+    runRecoveryScan(g_users, nowMillis, epochNow);
+    g_bootRecoveryScanDone = true;
   }
+
+  tickNotificationEngine(g_users, nowMillis, epochNow);
 }

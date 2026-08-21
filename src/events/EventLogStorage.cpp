@@ -1,6 +1,7 @@
 #include "EventLogStorage.h"
 
 #include <LittleFS.h>
+#include <string.h>
 
 #include <string>
 
@@ -53,4 +54,25 @@ uint32_t readLastWrittenTimestamp() {
   EventRecord rec{};
   if (!parseEventRecord(line, rec)) return 0;
   return rec.ts;
+}
+
+bool findEventRecordById(const char* id, EventStatus status, EventRecord& out) {
+  File f = LittleFS.open(kEventLogPath, "r");
+  if (!f) return false;
+
+  bool found = false;
+  while (f.available()) {
+    String line = f.readStringUntil('\n');
+    if (line.length() == 0) continue;
+
+    EventRecord rec{};
+    if (!parseEventRecord(std::string(line.c_str()), rec)) continue;
+    if (rec.status == status && strcmp(rec.id, id) == 0) {
+      out = rec;
+      found = true;
+      break;
+    }
+  }
+  f.close();
+  return found;
 }

@@ -60,3 +60,17 @@ inline const EventTypeConfig* findEventTypeConfig(EventType type) {
   }
   return nullptr;
 }
+
+// Sez. 3.2.1/3.2.3 - se una notifica va inviata per quello specifico status,
+// secondo la politica del tipo (es. NETWORK_ISSUE notifica solo END).
+inline bool shouldNotifyForStatus(NotifyPolicy policy, EventStatus status) {
+  switch (policy) {
+    case NotifyPolicy::START_AND_END:
+      return status == EventStatus::START || status == EventStatus::END;
+    case NotifyPolicy::ONLY_END:
+      return status == EventStatus::END;
+    case NotifyPolicy::INSTANT:
+      return status == EventStatus::INSTANT;
+  }
+  return false;
+}

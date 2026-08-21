@@ -15,3 +15,9 @@ bool appendEventRecord(const EventRecord& rec);
 // scansione completa. Ritorna 0 se il file non esiste, e' vuoto, o
 // l'ultima riga non e' un record valido.
 uint32_t readLastWrittenTimestamp();
+
+// Sez. 6.4/6.7 - cerca la riga (id, status) nel registro eventi, per
+// recuperare type/approx durante una scansione di recupero (sez. 7.2 non
+// duplica questi campi nel registro notifiche). Scansione lineare in
+// streaming; accettabile perche' usata solo durante recuperi, rari.
+bool findEventRecordById(const char* id, EventStatus status, EventRecord& out);

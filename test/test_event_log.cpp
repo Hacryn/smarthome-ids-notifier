@@ -80,6 +80,19 @@ static void test_event_type_table_lookup() {
   assert(rebootCfg->notify_policy == NotifyPolicy::INSTANT);
 }
 
+static void test_should_notify_for_status() {
+  // sez. 3.2.3 - NETWORK_ISSUE notifica solo END.
+  assert(!shouldNotifyForStatus(NotifyPolicy::ONLY_END, EventStatus::START));
+  assert(shouldNotifyForStatus(NotifyPolicy::ONLY_END, EventStatus::END));
+
+  assert(shouldNotifyForStatus(NotifyPolicy::START_AND_END, EventStatus::START));
+  assert(shouldNotifyForStatus(NotifyPolicy::START_AND_END, EventStatus::END));
+  assert(!shouldNotifyForStatus(NotifyPolicy::START_AND_END, EventStatus::INSTANT));
+
+  assert(shouldNotifyForStatus(NotifyPolicy::INSTANT, EventStatus::INSTANT));
+  assert(!shouldNotifyForStatus(NotifyPolicy::INSTANT, EventStatus::START));
+}
+
 int main() {
   test_serialize_omits_a_when_not_approx();
   test_serialize_includes_a_when_approx();
@@ -88,6 +101,7 @@ int main() {
   test_parse_rejects_missing_field();
   test_parse_rejects_wrong_id_length();
   test_event_type_table_lookup();
+  test_should_notify_for_status();
 
   printf("test_event_log: tutti i test superati\n");
   return 0;
