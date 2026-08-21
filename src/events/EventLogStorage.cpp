@@ -5,15 +5,27 @@
 
 #include <string>
 
-bool appendEventRecord(const EventRecord& rec) {
+#include "../rotation/FsErrorCounter.h"
+
+namespace {
+bool writeEventLine(const std::string& line) {
   File f = LittleFS.open(kEventLogPath, "a");
   if (!f) return false;
 
-  std::string line = serializeEventRecord(rec) + "\n";
   size_t written = f.print(line.c_str());
   f.close();
-
   return written == line.size();
+}
+}  // namespace
+
+bool appendEventRecord(const EventRecord& rec) {
+  std::string line = serializeEventRecord(rec) + "\n";
+
+  if (writeEventLine(line)) return true;
+  if (writeEventLine(line)) return true;  // sez. 9.4 - un solo retry
+
+  fsErrorCounter().recordFailure();
+  return false;
 }
 
 uint32_t readLastWrittenTimestamp() {

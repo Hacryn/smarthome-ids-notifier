@@ -5,10 +5,13 @@
 #include "EventLog.h"
 
 inline const char* kEventLogPath = "/log.jsonl";
+inline const char* kEventLogRotationTmpPath = "/log.jsonl.tmp";
 
-// Sez. 5.1 - append-only. Ritorna false se l'apertura fallisce o se i byte
-// scritti non corrispondono alla riga attesa (sez. 9.4 gestisce il retry e
-// il contatore di errori: qui solo l'esito grezzo dell'operazione).
+// Sez. 5.1 - append-only. Ritenta una volta in caso di fallimento (apertura
+// o byte scritti insufficienti); se fallisce anche al secondo tentativo,
+// incrementa il contatore condiviso di sez. 9.4 (fsErrorCounter()) e
+// ritorna false. La notifica Telegram dell'evento non e' comunque bloccata
+// da questo fallimento (il chiamante decide indipendentemente).
 bool appendEventRecord(const EventRecord& rec);
 
 // Sez. 5.4.3 - legge l'ultima riga del file risalendo dalla fine, senza

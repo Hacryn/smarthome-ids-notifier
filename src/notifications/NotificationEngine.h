@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#include <string>
 #include <vector>
 
 #include "../events/EventTypes.h"
@@ -33,3 +34,8 @@ void runRecoveryScan(const std::vector<AuthorizedUser>& users, uint32_t nowMilli
 // timer di retry o dopo un successo nel flusso normale (sez. 6.3).
 void tickNotificationEngine(const std::vector<AuthorizedUser>& users, uint32_t nowMillis,
                              uint32_t nowEpoch);
+
+// Invio diretto (non in coda, non tracciato in sez. 7) a tutti gli admin -
+// messaggi di sistema come segnalazioni di sez. 9.4, non notifiche di
+// eventi. Riusato anche da OpenEventsManager per sez. 6.5.
+void notifyAdmins(const std::vector<AuthorizedUser>& users, const std::string& text);

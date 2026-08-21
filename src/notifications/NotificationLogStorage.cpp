@@ -2,6 +2,7 @@
 
 #include <LittleFS.h>
 
+#include "../rotation/FsErrorCounter.h"
 #include "NotificationFolder.h"
 
 std::map<std::string, NotificationRecord> loadNotificationState(int64_t chatId) {
@@ -25,14 +26,24 @@ std::map<std::string, NotificationRecord> loadNotificationState(int64_t chatId) 
   return foldNotificationRecords(rows);
 }
 
-bool appendNotificationRecord(int64_t chatId, const NotificationRecord& rec) {
-  std::string path = notificationLogPath(chatId);
+namespace {
+bool writeNotificationLine(const std::string& path, const std::string& line) {
   File f = LittleFS.open(path.c_str(), "a");
   if (!f) return false;
 
-  std::string line = serializeNotificationRecord(rec) + "\n";
   size_t written = f.print(line.c_str());
   f.close();
-
   return written == line.size();
+}
+}  // namespace
+
+bool appendNotificationRecord(int64_t chatId, const NotificationRecord& rec) {
+  std::string path = notificationLogPath(chatId);
+  std::string line = serializeNotificationRecord(rec) + "\n";
+
+  if (writeNotificationLine(path, line)) return true;
+  if (writeNotificationLine(path, line)) return true;  // sez. 9.4 - un solo retry
+
+  fsErrorCounter().recordFailure();
+  return false;
 }

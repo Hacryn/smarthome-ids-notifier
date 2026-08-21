@@ -5,6 +5,7 @@
 #include <string>
 
 #include "../events/EventLogStorage.h"
+#include "../rotation/RotationEngine.h"
 #include "../telegram/RateLimiter.h"
 #include "../telegram/TelegramClient.h"
 #include "NotificationFolder.h"
@@ -89,6 +90,10 @@ std::string buildAggregatedMessageText(const std::vector<NotificationRecord>& pe
 
 void writeNotificationState(const OutboundMessage& msg, NotifyState state, uint32_t n,
                              uint32_t nowEpoch) {
+  // Sez. 9.4 - in modalita' degradata (spazio >= 95%) le scritture non
+  // essenziali (righe PENDING) vengono sospese; il log eventi resta prioritario.
+  if (state == NotifyState::PENDING && isFilesystemDegraded()) return;
+
   NotificationRecord rec{};
   memcpy(rec.id, msg.eventId, 32);
   rec.id[32] = '\0';
@@ -97,16 +102,6 @@ void writeNotificationState(const OutboundMessage& msg, NotifyState state, uint3
   rec.state = state;
   rec.n = n;
   appendNotificationRecord(msg.chatId, rec);
-}
-
-void enqueueAdminAlert(const std::vector<AuthorizedUser>& users, const std::string& text) {
-  for (const auto& user : users) {
-    if (!user.admin) continue;
-    OutboundMessage msg;
-    msg.chatId = user.chatId;
-    msg.text = text;
-    g_queue.push_back(msg);
-  }
 }
 
 // Ritorna true se questo esito deve scatenare una scansione anticipata
@@ -127,8 +122,8 @@ bool handleSendOutcome(const std::vector<AuthorizedUser>& users, const OutboundM
       }
     } else if (outcome == SendOutcomeCategory::PERMANENT_RECIPIENT) {
       writeNotificationState(msg, NotifyState::ABANDONED, msg.attemptCountBefore + 1, nowEpoch);
-      enqueueAdminAlert(users, "Notifica abbandonata (destinatario irraggiungibile): chat_id=" +
-                                    std::to_string(msg.chatId));
+      notifyAdmins(users, "Notifica abbandonata (destinatario irraggiungibile): chat_id=" +
+                               std::to_string(msg.chatId));
     } else {
       uint32_t newCount = msg.attemptCountBefore + 1;
       if (exceedsMaxRetries(newCount, kMaxRetries)) {
@@ -152,6 +147,16 @@ bool handleSendOutcome(const std::vector<AuthorizedUser>& users, const OutboundM
 }
 
 }  // namespace
+
+void notifyAdmins(const std::vector<AuthorizedUser>& users, const std::string& text) {
+  for (const auto& user : users) {
+    if (!user.admin) continue;
+    OutboundMessage msg;
+    msg.chatId = user.chatId;
+    msg.text = text;
+    g_queue.push_back(msg);
+  }
+}
 
 void notifyEvent(const std::vector<AuthorizedUser>& users, const char* id, EventType type,
                   EventStatus status, uint32_t eventTs, bool eventApprox) {

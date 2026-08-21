@@ -11,6 +11,8 @@
 #include "src/notifications/NotificationEngine.h"
 #include "src/pins/PinDebounce.h"
 #include "src/pins/PinMonitor.h"
+#include "src/rotation/FsErrorCounter.h"
+#include "src/rotation/RotationEngine.h"
 #include "src/telegram/CallbackData.h"
 #include "src/telegram/CommandParser.h"
 #include "src/telegram/TelegramClient.h"
@@ -18,6 +20,10 @@
 #include "src/time/TimeAnchorStorage.h"
 #include "src/users/UserList.h"
 #include "src/users/UserStorage.h"
+
+// Sez. 9 - manutenzione periodica (spazio + rotazione dovuta), non ad ogni
+// ciclo di loop.
+constexpr uint32_t kMaintenanceIntervalMs = 10UL * 60UL * 1000UL;
 
 // Sez. 3.4.1 - soglia di durata minima per generare NETWORK_ISSUE (non ancora
 // configurabile da comando: arrivera' con /setnetthreshold in una fase successiva).
@@ -39,8 +45,21 @@ std::vector<AuthorizedUser> g_users;
 // alla prima connessione WiFi (boot).
 bool g_bootTasksDone = false;
 
+// Sez. 9.4 - true se LittleFS.begin() e' stato riformattato al boot perche'
+// non montabile: da segnalare agli admin appena la connettivita' e' pronta.
+bool g_needsFsFormatAlert = false;
+
+uint32_t g_lastMaintenanceMillis = 0;
+
 void handleRawTransition(const PinTransition& t) {
   g_debouncers[t.eventTypeIndex].onTransition(t.level, t.millisAtIsr);
+}
+
+// Sez. 9.4 - il primo errore di scrittura filesystem va sempre segnalato.
+void alertOnFirstFsError() {
+  if (fsErrorCounter().count() == 1) {
+    notifyAdmins(g_users, "Primo errore di scrittura filesystem rilevato.");
+  }
 }
 
 // Sez. 8.1 punto 1 - l'autorizzazione va rivalutata al click, mai data per
@@ -87,14 +106,24 @@ void logNetworkIssueEvent(EventStatus status, uint32_t rawTs) {
     if (cfg && shouldNotifyForStatus(cfg->notify_policy, rec.status)) {
       notifyEvent(g_users, rec.id, rec.type, rec.status, rec.ts, rec.approx);
     }
+  } else {
+    alertOnFirstFsError();
   }
 }
 
 void setup() {
   Serial.begin(115200);
 
-  if (!LittleFS.begin()) {
-    Serial.println("LittleFS.begin() fallito");
+  // Sez. 9.4 - un solo tentativo di format, esclusivamente se il filesystem
+  // risulta non montabile (mai come reazione a un errore su un FS montato
+  // correttamente).
+  if (!LittleFS.begin(false)) {
+    Serial.println("LittleFS non montabile, tento un format...");
+    if (LittleFS.begin(true)) {
+      g_needsFsFormatAlert = true;
+    } else {
+      Serial.println("LittleFS irrecuperabile.");
+    }
   }
 
   // NOTA: nessuna sincronizzazione NTP in questa fase (arriva in una fase
@@ -113,6 +142,10 @@ void setup() {
       Serial.println("Scrittura users.json fallita");
     }
   }
+
+  // Sez. 9.3.2 - pulizia dei file temporanei residui di una rotazione
+  // interrotta da un blackout.
+  cleanupStaleRotationFiles(g_users);
 
   initPinMonitor();
   initWifi(WIFI_SSID, WIFI_PASSWORD);
@@ -149,6 +182,8 @@ void loop() {
       if (shouldNotifyForStatus(cfg.notify_policy, rec.status)) {
         notifyEvent(g_users, rec.id, rec.type, rec.status, rec.ts, rec.approx);
       }
+    } else {
+      alertOnFirstFsError();
     }
   }
 
@@ -173,7 +208,19 @@ void loop() {
     runRecoveryScan(g_users, nowMillis, epochNow);
     // Sez. 8 - riepilogo degli eventi rimasti aperti da un riavvio precedente.
     sendOpenEventsSummary(g_users);
+    if (g_needsFsFormatAlert) {
+      notifyAdmins(g_users, "LittleFS riformattato al boot (non montabile): storico perso.");
+      g_needsFsFormatAlert = false;
+    }
+    // Sez. 9 - verifica dello spazio ed eventuale rotazione, anche al boot.
+    performMaintenanceIfDue(g_users, epochNow, kDefaultRetentionWeeks);
     g_bootTasksDone = true;
+  }
+
+  if (nowMillis - g_lastMaintenanceMillis >= kMaintenanceIntervalMs) {
+    // Sez. 9.2/9.4 - verifica periodica di spazio e cadenza di rotazione.
+    performMaintenanceIfDue(g_users, epochNow, kDefaultRetentionWeeks);
+    g_lastMaintenanceMillis = nowMillis;
   }
 
   tickNotificationEngine(g_users, nowMillis, epochNow);

@@ -2,9 +2,20 @@
 
 #include <LittleFS.h>
 
+#include "../rotation/FsErrorCounter.h"
+
 namespace {
 const char* kUsersPath = "/users.json";
 const char* kUsersTmpPath = "/users.json.tmp";
+
+bool writeUsersTmp(const std::string& json) {
+  File f = LittleFS.open(kUsersTmpPath, "w");
+  if (!f) return false;
+
+  size_t written = f.print(json.c_str());
+  f.close();
+  return written == json.size();
+}
 }  // namespace
 
 bool loadUsers(std::vector<AuthorizedUser>& out) {
@@ -22,13 +33,14 @@ bool loadUsers(std::vector<AuthorizedUser>& out) {
 }
 
 bool saveUsers(const std::vector<AuthorizedUser>& users) {
-  File f = LittleFS.open(kUsersTmpPath, "w");
-  if (!f) return false;
-
   std::string json = serializeUsers(users);
-  size_t written = f.print(json.c_str());
-  f.close();
-  if (written != json.size()) return false;
+
+  bool written = writeUsersTmp(json);
+  if (!written) written = writeUsersTmp(json);  // sez. 9.4 - un solo retry
+  if (!written) {
+    fsErrorCounter().recordFailure();
+    return false;
+  }
 
   // Sez. 9.3.2 - rinomina atomica sopra il file esistente, non un
   // remove()+rename() separati (che non sarebbero atomici).
