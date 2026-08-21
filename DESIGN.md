@@ -1,7 +1,7 @@
 # Sistema di Monitoraggio Allarme Bentel con Notifiche Telegram
 ## Documento di Design, Requisiti e Specifiche Tecniche
 
-**Versione:** 0.10
+**Versione:** 1.00
 **Data:** Agosto 2026
 **Piattaforma target:** Arduino Nano ESP32
 
@@ -27,14 +27,11 @@ Corollario: il sistema non ha alcun osservatore esterno che possa accorgersi di 
 
 ### 2.1 Lettura dello stato allarme
 
-La centralina Bentel espone uscite PGM (programmabili) configurabili come indicatori di stato. Sono supportate due modalità di interfacciamento, applicabili a ciascuna uscita utilizzata:
+La centralina Bentel espone uscite PGM (programmabili) configurabili come indicatori di stato. **Le PGM utilizzate sono configurate in uscita a relè (contatto pulito NA/NC)**: collegamento diretto ai pin dell'ESP32, senza necessità di isolamento aggiuntivo, dato che il contatto è meccanicamente isolato dal circuito della centralina. Il pin di lettura va configurato in `INPUT_PULLUP`, con logica invertibile a seconda che si usi il contatto NA o NC (campo `active_low` della tabella di sezione 3.2.1).
 
-- **Uscita open collector verso negativo**: richiede un **optoisolatore** (es. PC817) tra la centralina e l'ESP32 per garantire isolamento galvanico. Il pin di lettura va configurato in `INPUT_PULLUP`; l'allarme attivo corrisponde a un livello LOW.
-- **Uscita a relè (contatto pulito NA/NC)**: collegamento diretto ai pin dell'ESP32, senza necessità di isolamento aggiuntivo, dato che il contatto è meccanicamente isolato dal circuito della centralina. Anche qui si utilizza `INPUT_PULLUP`, con logica invertibile a seconda che si usi il contatto NA o NC.
+**Nota sui contatti NC e i pin di boot**: un contatto NC (normalmente chiuso, si apre in allarme) porta il pin a livello LOW a riposo. Se il pin scelto è uno strapping pin dell'ESP32-S3, questo livello a riposo può interferire con la sequenza di avvio. Va quindi preferito, dove possibile, il contatto NA (normalmente aperto, riposa a livello HIGH grazie al pull-up) sugli eventuali pin di boot, oppure va evitato di cablare su quei pin specifici una zona configurata NC. La lista degli strapping pin del Nano ESP32 va verificata sul pinout ufficiale in fase di assegnazione dei pin.
 
-La scelta tra le due modalità dipende dal modello specifico di centralina e dalla sua configurazione in fase di programmazione installatore (da verificare sul manuale).
-
-**Nota — più tipologie di evento, più input fisici**: con l'introduzione di più tipologie di evento legate a contatti distinti sulla centralina (allarme interno, allarme garage, mancanza rete), è probabile che servano **più uscite PGM dedicate** sulla centralina (una per zona/condizione da monitorare separatamente), e di conseguenza **un pin di lettura ESP32 per ciascuna** (con relativo optoisolatore se l'uscita è open collector). Il numero di pin digitali disponibili sul Nano ESP32 e la disponibilità di uscite PGM configurabili sulla centralina vanno verificati in base al numero finale di tipologie da monitorare. Per "interruzione di corrente" in particolare, molte centraline Bentel espongono una PGM dedicata a "guasto rete / 230V mancante", attiva mentre il sistema resta alimentato dalla batteria tampone.
+**Nota — più tipologie di evento, più input fisici**: con l'introduzione di più tipologie di evento legate a contatti distinti sulla centralina (allarme interno, allarme garage, mancanza rete), è probabile che servano **più uscite PGM dedicate** sulla centralina (una per zona/condizione da monitorare separatamente), e di conseguenza **un pin di lettura ESP32 per ciascuna**. Il numero di pin digitali disponibili sul Nano ESP32 e la disponibilità di uscite PGM configurabili sulla centralina vanno verificati in base al numero finale di tipologie da monitorare. Per "interruzione di corrente" in particolare, molte centraline Bentel espongono una PGM dedicata a "guasto rete / 230V mancante", attiva mentre il sistema resta alimentato dalla batteria tampone.
 
 ### 2.2 Debounce
 
@@ -256,7 +253,7 @@ Esempio indicativo di `users.json`:
   - Promozione/rimozione del flag admin per un utente esistente
   - Reset completo della whitelist (da usare con cautela — da valutare se richiedere una conferma esplicita data la natura distruttiva)
 
-*(I nomi esatti dei comandi sono da definire in fase di implementazione, vedi sezione 12 e 15.)*
+*(Sintassi esatta dei comandi in sezione 12.)*
 
 ### 4.6 Filtro degli eventi precedenti all'aggiunta di un utente
 
@@ -452,6 +449,24 @@ Lo scenario a rischio è esattamente quello previsto dal design: al rientro da u
 - Tutti gli invii passano da un unico punto che impone un intervallo minimo di **1100 ms tra due messaggi consecutivi**, qualunque sia il destinatario. Con il numero di utenti previsto (pochi) questo singolo vincolo copre con margine sia il limite per-chat sia quello globale, senza richiedere due contatori separati.
 - L'attesa è realizzata con timer non bloccante: il loop continua a servire la coda degli interrupt (sezione 3.3) durante la pausa.
 - Alla ricezione di un **429**, il valore di `retry_after` viene rispettato integralmente e l'invio viene **ritentato fino a 3 volte** senza essere conteggiato come fallimento. Solo dopo il terzo `429` consecutivo la notifica viene marcata `PENDING` e passa al normale meccanismo di retry programmato.
+
+### 6.7 Aggregazione dei messaggi di recupero
+
+Una scansione di recupero (sezione 6.2) può trovare più notifiche pendenti per lo stesso utente nello stesso ciclo — tipico dopo un down di rete prolungato, dove si accumulano più eventi. Inviarle come messaggi separati, anche rispettando il rate limiter di sezione 6.6, produce comunque una raffica poco leggibile e consuma più chiamate API del necessario.
+
+**Soglia di aggregazione** (default: **3**, configurabile, `/setaggregatethreshold`): se il numero di notifiche pendenti trovate per un dato `chat_id` in una singola scansione supera la soglia, vengono raggruppate in **un unico messaggio riassuntivo** invece di essere inviate una per una:
+
+```
+⏪ 5 notifiche recuperate (dalle 14:02 alle 15:30):
+• Allarme garage — 14:02 → 14:07 (5m)
+• Mancanza rete 230V — 14:10 → 15:28 (1h 18m)
+• Riavvio — 15:29
+```
+
+- Sotto la soglia, il comportamento resta quello ordinario di sezione 6.4 (un messaggio per notifica, con o senza prefisso di recupero a seconda del grace period).
+- Il messaggio aggregato porta sempre il prefisso "recuperate" (è per definizione un raggruppamento di notifiche in ritardo) e riporta ogni evento con il proprio timestamp formattato secondo le preferenze del destinatario.
+- **Tracciamento**: l'aggregazione è solo un raggruppamento nella formattazione dell'invio Telegram — lo stato di ciascuna notifica in `notif_<chat_id>.jsonl` (sezione 7) resta individuale. Se l'invio del messaggio aggregato ha successo, ogni notifica del gruppo viene marcata `RESOLVED` singolarmente; se fallisce, ogni notifica del gruppo resta (o torna) `PENDING`, con il proprio contatore `n` incrementato, secondo le regole ordinarie di sezione 6.5.
+- L'aggregazione si applica solo all'interno di una singola scansione per un singolo utente: non accorpa mai eventi di utenti diversi, né notifiche trovate in scansioni diverse.
 
 ---
 
@@ -657,11 +672,19 @@ Il filesystem è un punto di guasto silenzioso: una scrittura fallita per spazio
 
 ### 10.1 Fusi orari preimpostati
 
-L'utente sceglie il proprio fuso orario da un **set predefinito** di opzioni comuni (es. Europe/Rome, Europe/London, UTC, ecc.), evitando di dover inserire manualmente stringhe tecniche. Ogni opzione è internamente mappata a una **stringa TZ in formato POSIX**, ad esempio per l'Italia:
+L'utente sceglie il proprio fuso orario da un **set predefinito** di opzioni comuni, evitando di dover inserire manualmente stringhe tecniche. Ogni opzione è internamente mappata a una **stringa TZ in formato POSIX**:
 
-```
-CET-1CEST,M3.5.0,M10.5.0/3
-```
+| Preset | Copre anche | Stringa TZ POSIX | DST |
+|---|---|---|---|
+| `UTC` | — (default) | `UTC0` | No |
+| `Europe/Rome` | Italia | `CET-1CEST,M3.5.0,M10.5.0/3` | Sì (CET/CEST) |
+| `Europe/Berlin` | Germania, Francia, Spagna, Benelux (stesso fuso di Roma) | `CET-1CEST,M3.5.0,M10.5.0/3` | Sì (CET/CEST) |
+| `Europe/London` | Regno Unito | `GMT0BST,M3.5.0/1,M10.5.0` | Sì (GMT/BST) |
+| `Europe/Moscow` | Russia europea | `MSK-3` | No |
+| `America/New_York` | USA orientali | `EST5EDT,M3.2.0,M11.1.0` | Sì (EST/EDT) |
+| `America/Los_Angeles` | USA occidentali | `PST8PDT,M3.2.0,M11.1.0` | Sì (PST/PDT) |
+
+`Europe/Rome` ed `Europe/Berlin` condividono la stessa stringa POSIX (stesso fuso orario e stesse regole di cambio ora legale a livello UE): sono offerti come preset distinti solo per comodità di selezione, non perché richiedano una regola diversa. La lista è pensata per coprire l'uso familiare atteso (Italia come caso principale, più qualche fuso comune per parenti/amici altrove); è estendibile in futuro aggiungendo altre righe alla tabella, senza impatto sulle preferenze già impostate dagli utenti esistenti.
 
 ### 10.2 Gestione automatica dell'ora legale (DST)
 
@@ -684,6 +707,7 @@ Il fuso orario è una **preferenza personale** salvata in `userconfig.json` (sez
 | Intervallo retry programmato | 60 minuti | `/setretryinterval <minuti>` |
 | Numero massimo di tentativi prima della rinuncia | 24 | `/setmaxretries <n>` |
 | Soglia di durata per generare `NETWORK_ISSUE` | 120 secondi | `/setnetthreshold <secondi>` |
+| Soglia di aggregazione notifiche recuperate | 3 | `/setaggregatethreshold <n>` |
 
 Chiavi NVS di servizio, non modificabili da comando: `schema_ver` (5.5), `last_epoch` (5.4.1), timestamp ultima rotazione (9.3.2).
 
@@ -692,7 +716,7 @@ Chiavi NVS di servizio, non modificabili da comando: `schema_ver` (5.5), `last_e
 | Parametro | Default | Comando |
 |---|---|---|
 | Formato data/ora | ISO 8601 | `/setdateformat <formato>` |
-| Timezone | Da definire (es. UTC) | `/settimezone <preset>` |
+| Timezone | `UTC` | `/settimezone <preset>` |
 | Tipi di evento notificati | Tutti abilitati | `/notify <tipo_evento> on\|off` |
 
 **Nota importante**: la whitelist personale dei tipi di evento notificati filtra solo l'**invio delle notifiche a quello specifico utente**, non la **scrittura nel log eventi**. Tutti gli eventi vengono sempre registrati nello storico condiviso, indipendentemente dalle preferenze di notifica di ciascun utente. (Per disattivare invece un tipo a livello di sistema, si usa il flag `enabled` della tabella di sezione 3.2.1.)
@@ -714,11 +738,12 @@ Chiavi NVS di servizio, non modificabili da comando: `schema_ver` (5.5), `last_e
 | `/setretryinterval <minuti>` | Admin | Imposta l'intervallo globale del retry programmato |
 | `/setmaxretries <n>` | Admin | Imposta il numero di tentativi oltre il quale una notifica è abbandonata |
 | `/setnetthreshold <secondi>` | Admin | Imposta la durata minima di un down di connettività perché generi un evento |
+| `/setaggregatethreshold <n>` | Admin | Imposta la soglia oltre la quale le notifiche recuperate vengono raggruppate in un unico messaggio |
 | `/closeevent <id> [timestamp]` | Admin | Chiude manualmente un evento rimasto aperto (fallback testuale dei bottoni inline, vedi 8.1) |
 | `/adduser <chat_id>` | Admin | Aggiunge un nuovo `chat_id` alla whitelist |
 | `/removeuser <chat_id>` | Admin | Rimuove un `chat_id` dalla whitelist |
 | `/promoteuser <chat_id>` | Admin | Modifica il flag `admin` di un utente esistente andando a promuovere ad `Admin` |
-| `/resetusers <chat_id>` | Admin | Svuota la whitelist riportardola ai valori di default (operazione distruttiva, da proteggere con conferma) |
+| `/resetusers` | Admin | Svuota la whitelist riportardola ai valori di default (operazione distruttiva, da proteggere con conferma) |
 
 ### 12.1 Rendering di `/log`
 
@@ -752,7 +777,7 @@ Allarme interno     19/08 08:30 → APERTO
 
 ## 13. Considerazioni di robustezza
 
-- **Isolamento galvanico**: obbligatorio in caso di interfacciamento con uscita open collector, per proteggere sia l'Arduino sia la centralina.
+- **Isolamento galvanico**: non necessario. Le uscite PGM sono utilizzate in configurazione a relè (contatto pulito), meccanicamente isolato dal circuito della centralina — nessun optoisolatore richiesto (sezione 2.1).
 - **Perdita di transizioni durante l'I/O di rete**: risolta strutturalmente da ISR + coda + datazione retroattiva (sezione 3.3); nessuna transizione può essere persa a causa di un blocco del loop.
 - **Watchdog**: il Task WDT è abilitato sul loop applicativo (timeout 30 s, superiore ai timeout di rete di 10 s). Un blocco genuino provoca un riavvio, che genera a sua volta un evento `REBOOT` notificato — rendendo visibile un guasto che altrimenti sarebbe silenzioso.
 - **Sincronizzazione oraria**: l'ESP32 non dispone di RTC con batteria tampone; l'orario viene ottenuto via NTP alla connessione e periodicamente, in UTC. In assenza di NTP il sistema usa l'ancora oraria persistita in NVS e marca i timestamp come approssimati (sezione 5.4). La conversione in ora locale (con gestione automatica DST) avviene solo in fase di presentazione, secondo il fuso di ciascun utente.
@@ -777,6 +802,7 @@ Allarme interno     19/08 08:30 → APERTO
 | Argomento | Decisione |
 |---|---|
 | Dipendenze esterne | Nessuna: dispositivo autonomo, comunicazione diretta con Telegram, per accorciare la catena di guasto |
+| Interfacciamento PGM | Uscite a relè (contatto pulito NA/NC) su tutte le zone; nessun isolamento aggiuntivo necessario; preferire contatti NA sugli eventuali strapping pin dell'ESP32-S3 |
 | Modello di concorrenza | ISR `IRAM_ATTR` + coda FreeRTOS + debounce e datazione retroattiva nel loop; accesso a LittleFS solo dal loop (nessun mutex necessario) |
 | Struttura del log eventi | JSON Lines, append-only, contiene solo il rilevamento (`START`/`END`/`INSTANT`), non le notifiche |
 | Eventi istantanei (es. REBOOT) | Valore enum dedicato per `INSTANT` |
@@ -800,6 +826,7 @@ Allarme interno     19/08 08:30 → APERTO
 | Esiti di invio | Classificati in successo / transitorio / throttling / permanente-destinatario / errore di sistema; retry solo sui transitori; ottenuti da `fb::Result` senza wrapper |
 | Stato terminale delle notifiche | `ABANDONED` su errore permanente o superamento di `max_retries` (default 24), con contatore `n` nel record |
 | Rate limiting | Intervallo minimo di 1100 ms tra invii; `429` rispettato con `retry_after` e fino a 3 ritentativi immediati |
+| Aggregazione notifiche recuperate | Sopra soglia configurabile (default 3, per utente per scansione) le notifiche pendenti vengono raggruppate in un unico messaggio invece di N separati |
 | Notifiche recuperate entro il grace period (5 min default) | Inviate come notifiche normali, senza prefisso di "recupero" |
 | Notifiche recuperate oltre il grace period | Inviate con prefisso esplicito e timestamp originale; sempre con prefisso se il timestamp è approssimato |
 | Recupero non riuscito | Timer di retry programmato (default 60 min): reset su fallimento transitorio; successo di un invio nel flusso normale scatena una scansione anticipata, protetta da `scan_in_progress` contro la rientranza |
@@ -814,26 +841,19 @@ Allarme interno     19/08 08:30 → APERTO
 | Tipo dei `chat_id` | `int64_t` ovunque (gruppi/supergruppi eccedono i 32 bit) |
 | Permessi | Singolo flag booleano `admin` (no permessi granulari per ora) |
 | Onboarding iniziale | `chat_id` iniziale in `secrets.h`, promosso automaticamente ad admin al primo avvio |
-| Gestione whitelist | Comandi dedicati per aggiungere/rimuovere/promuovere/resettare (nomi da definire) |
+| Gestione whitelist | Comandi dedicati: `/adduser`, `/removeuser`, `/promoteuser`, `/resetusers` |
 | Segreti | File `secrets.h` separato, in chiaro, non versionato (con `secrets.h.example` versionato) |
 | TLS | `setInsecure()`, per evitare il guasto silenzioso da rotazione del certificato |
 | Monitoraggio dello stato | Nessun heartbeat automatico; verifica manuale tramite `/status` |
 | Configurazioni globali | NVS (retention, grace period, retry interval, max retries, soglia di rete) |
 | Configurazioni per utente | File JSON su LittleFS (`userconfig.json`): formato data, timezone, tipi evento notificati |
 | Rendering `/log` | Eventi aggregati con durata (`14:02 → 14:07, 5m`), ring buffer degli ultimi N eventi |
-| Timezone | Set di preset predefiniti mappati a stringhe TZ POSIX, gestione DST automatica, preferenza per singolo utente |
+| Timezone | Set di preset predefiniti mappati a stringhe TZ POSIX (UTC, Europe/Rome, Europe/Berlin, Europe/London, Europe/Moscow, America/New_York, America/Los_Angeles), gestione DST automatica, default UTC, preferenza per singolo utente |
 | Alimentazione | Fornita dalla centralina (con batteria tampone): riavvii per blackout rari, interruzioni di rete più probabili |
 
 ---
 
 ## 15. Prossimi passi
 
-- Definire i nomi esatti e la sintassi dei comandi di gestione whitelist (aggiunta, rimozione, promozione, reset) e il meccanismo di conferma per il reset.
-- Confermare (o rivedere) il meccanismo `added_ts` per il filtro degli eventi precedenti all'aggiunta di un utente (sezione 4.6), incluso il comportamento per un evento il cui `START` precede `added_ts` ma il cui `END` lo segue.
-- Definire il valore di default per il periodo di retention del log eventi e notifiche.
-- Definire la lista dei preset di timezone da offrire e le relative stringhe POSIX.
-- Verificare che i pin scelti sul Nano ESP32 non siano strapping pin dell'ESP32-S3 (un livello LOW imposto da un optoisolatore al boot potrebbe impedire l'avvio) e valutare un pull-up esterno più robusto di quello interno per tratte di cablaggio lunghe verso la centralina.
-- Valutare l'**aggregazione delle notifiche recuperate** in un unico messaggio riassuntivo quando superano una certa soglia numerica (es. *"⏪ 7 eventi durante l'assenza di rete tra le 14:02 e le 15:30"*), come ulteriore mitigazione del rate limiting e miglioramento della leggibilità.
 - Valutare (facoltativo, discusso separatamente) l'introduzione di comandi per inserire/disinserire l'allarme da remoto — richiede verifica di supporto hardware sulla centralina e un'attenta analisi di sicurezza aggiuntiva prima di essere formalizzato nel documento.
 - Implementazione dello sketch Arduino completo.
-- Test di interfacciamento con il modello specifico di centralina Bentel in uso.
