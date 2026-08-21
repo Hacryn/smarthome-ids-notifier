@@ -13,6 +13,8 @@
 #include "src/telegram/TelegramClient.h"
 #include "src/time/TimeAnchor.h"
 #include "src/time/TimeAnchorStorage.h"
+#include "src/users/UserList.h"
+#include "src/users/UserStorage.h"
 
 // Sez. 3.4.1 - soglia di durata minima per generare NETWORK_ISSUE (non ancora
 // configurabile da comando: arrivera' con /setnetthreshold in una fase successiva).
@@ -33,6 +35,12 @@ NetworkIssueTracker g_networkIssueTracker;
 // lo esercita davvero).
 RateLimiter g_telegramRateLimiter;
 bool g_bootMessageSent = false;
+
+// Sez. 4 - whitelist utenti autorizzati. Il controllo effettivo sui comandi
+// in arrivo (ignorare silenziosamente i non autorizzati) e sull'invio delle
+// notifiche arrivera' con la gestione comandi/notifiche (fasi successive);
+// qui e' cablato solo l'onboarding del primo admin.
+std::vector<AuthorizedUser> g_users;
 
 void handleRawTransition(const PinTransition& t) {
   g_debouncers[t.eventTypeIndex].onTransition(t.level, t.millisAtIsr);
@@ -65,6 +73,17 @@ void setup() {
   // (sez. 5.4.1); ogni riga scritta e' quindi sempre marcata approssimata.
   g_lastEpochAnchor = loadLastEpoch();
   g_lastWrittenTs = readLastWrittenTimestamp();
+
+  // Sez. 4.5 - onboarding: se users.json e' vuoto/assente, il chat_id di
+  // secrets.h diventa automaticamente il primo admin.
+  if (!loadUsers(g_users)) {
+    Serial.println("Lettura users.json fallita");
+  }
+  if (ensureOnboardingAdmin(g_users, ONBOARDING_CHAT_ID, estimateTimestamp(g_lastEpochAnchor, millis()))) {
+    if (!saveUsers(g_users)) {
+      Serial.println("Scrittura users.json fallita");
+    }
+  }
 
   initPinMonitor();
   initWifi(WIFI_SSID, WIFI_PASSWORD);
