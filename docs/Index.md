@@ -1,0 +1,18 @@
+# Index
+
+One-line-to-short-paragraph description of every design/documentation `.md` file in this repository, so a reader (human or Claude skill) can decide which files are relevant to a given task without opening all of them.
+
+| File | Contains |
+|---|---|
+| [../DESIGN.md](../DESIGN.md) | The original requirements and design rationale document: system objective, hardware requirements, the full software architecture and concurrency model, event types, persistence formats, users/permissions, notification recovery, rotation, command set, and *why* each of these was designed the way it was — including alternatives considered and rejected. Authoritative for **requirements and rationale**; where it disagrees with docs/ on an implementation detail, the code (and docs/) is the source of truth for current behavior. |
+| [../README.md](../README.md) | Project overview, feature list, and the quickstart flow (prerequisites, secrets setup, library install, wiring, compile/flash, first boot). The outward-facing entry point — always relevant, since almost any change can touch scope, features, or setup steps. |
+| [architecture.md](architecture.md) | The no-external-dependencies constraint, the ISR/queue/debounce concurrency model and the invariants it establishes, the non-blocking outbound notification queue, and the event log as single source of truth. Relevant to anything touching concurrency, component responsibilities, or data flow. |
+| [commands.md](commands.md) | Full Telegram command reference (user-level and admin-only), whitelist-gating behavior. Relevant to any new/changed bot command. |
+| [configuration.md](configuration.md) | The three configuration layers — `secrets.h` (build-time secrets), global config (NVS, admin-managed), per-user preferences (LittleFS) — what each field means, where it's stored, how it's changed. Relevant to any new/changed secret, global setting, or per-user preference. |
+| [data-model.md](data-model.md) | On-disk (LittleFS JSON/JSONL) and NVS record formats: `log.jsonl` schema, atomic write pattern, monotonicity handling, and (further in the file) the per-user notification log and preferences file formats. Relevant to any change to a persisted file/record format. |
+| [modules.md](modules.md) | Source tree walked folder by folder, each file tagged **pure** (portable, host-tested) or **hardware-bound** (ESP32-only, compile-verified only). Relevant to any new source file, moved/renamed module, or a file crossing the pure/hardware-bound boundary. |
+| [testing.md](testing.md) | The dual verification strategy — host-side g++ harness (`test/`) for pure modules, `arduino-cli compile` for the full sketch — how to run each, and what each does/doesn't prove. Relevant to anything touching the test harness or how to verify a change. |
+| [hardware-setup.md](hardware-setup.md) | Board/panel wiring, the PGM relay-contact wiring scheme, the pin-assignments-are-placeholders caveat, and the strapping-pin caveat for NC contacts. Relevant to any change to pin assignments or physical wiring. |
+| [littlefs-troubleshooting.md](littlefs-troubleshooting.md) | A specific incident writeup: LittleFS reporting 0/0 bytes after flashing, root-caused to an upload tool not writing the SPIFFS/LittleFS partition, with the fix. Relevant only if touching flashing/partition/upload tooling, or hitting the same symptom again. |
+
+Not indexed here (not project design/reference docs): licensing, changelog, or other non-architectural files, if any are added later — extend this table when a new `.md` is added under `docs/` or at the repo root that documents requirements, architecture, or reference material.

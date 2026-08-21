@@ -1,6 +1,6 @@
 ---
 name: plan-with-docs
-description: Use whenever the user asks to create or modify an implementation plan, roadmap, or design proposal for this project (SmartHome IDS Notifier) — phrases like "let's plan", "how should we implement X", "update the plan for Y", "what's the approach for Z". Grounds the plan in the project's actual documented requirements and architecture by reading README.md, DESIGN.md, and the relevant files in docs/ before proposing or revising anything, so the plan doesn't contradict or duplicate what's already specified. Make sure to use this even if the user doesn't explicitly mention the docs.
+description: Use whenever the user asks to create or modify an implementation plan, roadmap, or design proposal for this project (SmartHome IDS Notifier) — phrases like "let's plan", "how should we implement X", "update the plan for Y", "what's the approach for Z". Grounds the plan in the project's actual documented requirements and architecture by always reading README.md, then docs/Index.md to decide which other files (including DESIGN.md) are relevant, before proposing or revising anything, so the plan doesn't contradict or duplicate what's already specified. Make sure to use this even if the user doesn't explicitly mention the docs.
 ---
 
 # Plan with project docs
@@ -9,21 +9,11 @@ This project's requirements, architecture, and conventions are already written d
 
 ## Steps
 
-1. **Read [README.md](../../../README.md)** for the project's scope, features, and quickstart flow — the outward-facing shape of the system.
+1. **Always read [README.md](../../../README.md)** for the project's scope, features, and quickstart flow — the outward-facing shape of the system. This is unconditional, regardless of what the plan touches.
 
-2. **Read [DESIGN.md](../../../DESIGN.md)** for the full requirements and design rationale. This is the authoritative source for *why* things are built the way they are (e.g. section 1.1's independence constraint, section 3's concurrency model). A plan that conflicts with a documented rationale needs to either respect it or explicitly flag the conflict to the user — don't silently override it.
+2. **Always read [docs/Index.md](../../../docs/Index.md)**. It gives a short description of every design/reference document in the repo, including DESIGN.md — use it to judge which of those files are actually relevant to the plan at hand, instead of guessing from filenames or opening everything.
 
-3. **Read the docs/ files relevant to the plan's area**, not all of them reflexively:
-   - Touching architecture, concurrency, or component boundaries → [docs/architecture.md](../../../docs/architecture.md)
-   - Touching persisted files, NVS, or on-disk formats → [docs/data-model.md](../../../docs/data-model.md)
-   - Touching source layout or adding/moving modules → [docs/modules.md](../../../docs/modules.md)
-   - Touching Telegram commands → [docs/commands.md](../../../docs/commands.md)
-   - Touching secrets, global config, or per-user preferences → [docs/configuration.md](../../../docs/configuration.md)
-   - Touching the test harness or CI-equivalent checks → [docs/testing.md](../../../docs/testing.md)
-   - Touching pin assignments or wiring → [docs/hardware-setup.md](../../../docs/hardware-setup.md)
-   - LittleFS-specific issues → [docs/littlefs-troubleshooting.md](../../../docs/littlefs-troubleshooting.md)
-
-   If unsure which apply, skim [docs/README.md](../../../docs/README.md) for the index rather than opening every file.
+3. **Read only the files Index.md points you to as relevant**, based on the plan's area — e.g. a plan touching concurrency or component boundaries needs the architecture doc, a plan touching Telegram behavior needs the commands doc, and so on. Always include [DESIGN.md](../../../DESIGN.md) when the plan could conflict with a documented requirement or deliberate design decision (e.g. the no-MQTT-broker constraint, the ISR/debounce concurrency model) — it's the authoritative source for *why* things are built the way they are, not just what they currently do. A plan that conflicts with a documented rationale needs to either respect it or explicitly flag the conflict to the user — don't silently override it.
 
 4. **Write or revise the plan** so it's consistent with what's documented:
    - Reuse existing terminology and component names instead of inventing new ones.
