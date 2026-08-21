@@ -1,4 +1,5 @@
 #include <LittleFS.h>
+#include <esp_task_wdt.h>
 
 #include "secrets.h"
 #include "src/config/GlobalConfigStorage.h"
@@ -72,12 +73,15 @@ void onTelegramCallback(const IncomingCallback& cb) {
   answerCallback(cb.queryId, closed ? "Evento chiuso" : "Evento gia' chiuso o non trovato");
 }
 
-void logNetworkIssueEvent(EventStatus status, uint32_t rawTs) {
+// Scrive una riga nel registro e attiva la normale notifica (sez. 6.1),
+// riusata per gli eventi sui pin, NETWORK_ISSUE e REBOOT: stesso pattern
+// clamp+append+notify+segnalazione errori in tutti e tre i casi.
+void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs) {
   ClampedTimestamp clamped = applyMonotonicClamp(rawTs, g_lastWrittenTs);
 
   EventRecord rec{};
   generateEventId(rec.id);
-  rec.type = EventType::NETWORK_ISSUE;
+  rec.type = type;
   rec.status = status;
   rec.ts = clamped.ts;
   rec.approx = true;  // sempre vero finche' non esiste una fonte NTP (fase successiva)
@@ -85,7 +89,7 @@ void logNetworkIssueEvent(EventStatus status, uint32_t rawTs) {
   if (appendEventRecord(rec)) {
     g_lastWrittenTs = clamped.ts;
 
-    const EventTypeConfig* cfg = findEventTypeConfig(EventType::NETWORK_ISSUE);
+    const EventTypeConfig* cfg = findEventTypeConfig(type);
     if (cfg && shouldNotifyForStatus(cfg->notify_policy, rec.status)) {
       notifyEvent(g_users, rec.id, rec.type, rec.status, rec.ts, rec.approx);
     }
@@ -96,6 +100,13 @@ void logNetworkIssueEvent(EventStatus status, uint32_t rawTs) {
 
 void setup() {
   Serial.begin(115200);
+
+  // Sez. 3.3/13 - Task WDT sul loop applicativo, timeout superiore al
+  // massimo timeout di rete (30s contro 10s). Un blocco genuino provoca un
+  // riavvio, che a sua volta genera un evento REBOOT notificato (sotto),
+  // rendendo visibile un guasto che altrimenti sarebbe silenzioso.
+  esp_task_wdt_init(30, true);
+  enableLoopWDT();
 
   // Sez. 9.4 - un solo tentativo di format, esclusivamente se il filesystem
   // risulta non montabile (mai come reazione a un errore su un FS montato
@@ -126,6 +137,10 @@ void setup() {
     }
   }
 
+  // Sez. 3.2/13 - REBOOT reso visibile ad ogni avvio (istantaneo, sempre
+  // notificato), incluso quello provocato dal watchdog qui sopra.
+  logAndNotifyEvent(EventType::REBOOT, EventStatus::INSTANT, estimateTimestamp(g_lastEpochAnchor, millis()));
+
   // Sez. 9.3.2 - pulizia dei file temporanei residui di una rotazione
   // interrotta da un blackout.
   cleanupStaleRotationFiles(g_users);
@@ -153,25 +168,9 @@ void loop() {
     DebouncedTransition transition;
     if (!g_debouncers[i].poll(nowMillis, kPinDebounceMs, transition)) continue;
 
-    EventRecord rec{};
-    generateEventId(rec.id);
-    rec.type = cfg.type;
-    rec.status = resolvePinEventStatus(transition.level, cfg.active_low);
-
+    EventStatus status = resolvePinEventStatus(transition.level, cfg.active_low);
     uint32_t rawTs = computeRetroactiveTimestamp(epochNow, nowMillis, transition.millisAtIsr);
-    ClampedTimestamp clamped = applyMonotonicClamp(rawTs, g_lastWrittenTs);
-    rec.ts = clamped.ts;
-    rec.approx = true;  // sempre vero finche' non esiste una fonte NTP (fase successiva)
-
-    if (appendEventRecord(rec)) {
-      g_lastWrittenTs = clamped.ts;
-
-      if (shouldNotifyForStatus(cfg.notify_policy, rec.status)) {
-        notifyEvent(g_users, rec.id, rec.type, rec.status, rec.ts, rec.approx);
-      }
-    } else {
-      alertOnFirstFsError();
-    }
+    logAndNotifyEvent(cfg.type, status, rawTs);
   }
 
   tickWifi(nowMillis);
@@ -183,9 +182,9 @@ void loop() {
   NetworkIssueEvent netEv = g_networkIssueTracker.update(
       reachable, nowMillis, epochNow, globalConfig().networkIssueThresholdSec);
   if (netEv.kind == NetworkIssueEvent::Kind::STARTED) {
-    logNetworkIssueEvent(EventStatus::START, netEv.ts);
+    logAndNotifyEvent(EventType::NETWORK_ISSUE, EventStatus::START, netEv.ts);
   } else if (netEv.kind == NetworkIssueEvent::Kind::ENDED) {
-    logNetworkIssueEvent(EventStatus::END, netEv.ts);
+    logAndNotifyEvent(EventType::NETWORK_ISSUE, EventStatus::END, netEv.ts);
     // Sez. 6.2 - scansione di recupero al ripristino della connettivita'.
     runRecoveryScan(g_users, nowMillis, epochNow);
   }
