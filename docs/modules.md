@@ -18,8 +18,8 @@ The event log itself: types, schema, storage, and the two derived views built on
 | `EventId.h/.cpp` | Hardware | 32-hex-char ID generation via `esp_random()`. |
 | `EventTiming.h/.cpp` | Pure | The retroactive-dating formula. |
 | `EventAggregator.h/.cpp` | Pure | Pairs `START`/`END` rows sharing an `id` into one aggregated event with a computed duration, in a bounded ring buffer fed one line at a time — the logic behind `/log`, reused by the notification-aggregation message text. |
-| `OpenEventsTracker.h/.cpp` | Pure | Given a stream of log rows, finds events with a `START` but no matching `END` ("open" events). |
-| `OpenEventsManager.h/.cpp` | Hardware | Detects open events from the real log, closes one (verifying it's still open, to guard against a double-click or a duplicate `/closeevent`), and sends the open-events summary (with inline "close" buttons for admins). |
+| `OpenEventsTracker.h/.cpp` | Pure | Given a stream of log rows, finds events with a `START` but no matching `END` ("open" events) and selects the most recent open event of a requested type. |
+| `OpenEventsManager.h/.cpp` | Hardware | Detects open events from the real log, resolves the ID to reuse for an `END`, closes one (verifying it's still open, to guard against a double-click or a duplicate `/closeevent`), and sends the open-events summary (with inline "close" buttons for admins). |
 
 ## `src/pins/`
 

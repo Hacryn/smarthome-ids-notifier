@@ -18,6 +18,13 @@ Append-only, one JSON object per line, written by [`src/events/EventLogStorage.h
 | `ts` | Unix epoch (UTC) of detection, retroactively dated (see [architecture.md](architecture.md)). |
 | `a` | Present (`1`) only when the timestamp is approximate — omitted entirely otherwise, so it costs nothing on the common case. |
 
+For duration events, the `END` row reuses the ID of the currently open `START`
+row of the same event type. The open-event lookup is rebuilt from
+`log.jsonl`, so an event can be closed correctly even after an Arduino reboot.
+An `END` without a matching open `START` is ignored, as is a duplicate `START`
+for a type that is already open; this prevents orphan rows from breaking
+aggregation and duration calculation.
+
 ### Monotonicity
 
 Because the file is append-only, a backward NTP correction or an over-optimistic anchor estimate could otherwise produce a non-increasing timestamp sequence, breaking `/log` ordering, rotation age calculations, and duration reconstruction. The firmware keeps `last_written_ts` in RAM (seeded at boot by reading the file's last line backwards, without a full scan) and clamps every write:

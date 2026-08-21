@@ -8,7 +8,7 @@ Implemented in [`src/telegram/CommandRouter.cpp`](../src/telegram/CommandRouter.
 
 | Command | Effect |
 |---|---|
-| `/log [n]` | Shows the last `n` aggregated events (`START`/`END` pairs merged with a computed duration), most recent first. Default `n` is 10, capped at 50. Still-open events show `APERTO`; approximate timestamps are prefixed `~`. |
+| `/log [n]` | Shows the last `n` aggregated events (`START`/`END` pairs sharing the same event ID, merged with a computed duration), most recent first. Default `n` is 10, capped at 50. Still-open events show `APERTO`; approximate timestamps are prefixed `~`. |
 | `/status` | Uptime and last reset cause, per-pin GPIO state, WiFi status (SSID/RSSI or backoff attempt), NTP sync status, open-event count, pending/abandoned notification counts and retry-timer state, LittleFS usage and write-error count (with degraded-mode flag), ISR queue overflow count, last system-level send error, last rotation timestamp. |
 | `/config` | Shows your own preferences (date format, timezone, disabled notification types). Admins also see the current global configuration. |
 | `/setdateformat <format>` | Sets your own display date/time format — a literal `strftime()` pattern, e.g. `/setdateformat %d/%m/%Y %H:%M`. Everything after the command is taken verbatim. |
