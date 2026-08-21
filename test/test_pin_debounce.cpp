@@ -1,8 +1,8 @@
 #include <cassert>
 #include <cstdio>
 
-#include "../src/EventTiming.h"
-#include "../src/PinDebounce.h"
+#include "../src/events/EventTiming.h"
+#include "../src/pins/PinDebounce.h"
 
 static void test_poll_before_threshold_returns_false() {
   PinDebouncer d;

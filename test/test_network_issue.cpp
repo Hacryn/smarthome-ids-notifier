@@ -1,8 +1,8 @@
 #include <cassert>
 #include <cstdio>
 
-#include "../src/NetworkIssueTracker.h"
-#include "../src/WifiBackoff.h"
+#include "../src/network/NetworkIssueTracker.h"
+#include "../src/network/WifiBackoff.h"
 
 static void test_backoff_schedule() {
   assert(backoffDelayMs(1) == 5000);

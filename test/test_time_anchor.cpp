@@ -1,7 +1,7 @@
 #include <cassert>
 #include <cstdio>
 
-#include "../src/TimeAnchor.h"
+#include "../src/time/TimeAnchor.h"
 
 static void test_estimate_timestamp() {
   // last_epoch salvato a 1755500000, 90 secondi trascorsi dal boot.

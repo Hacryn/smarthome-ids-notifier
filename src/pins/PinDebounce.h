@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-#include "EventTypes.h"
+#include "../events/EventTypes.h"
 
 // Sez. 2.2 - soglia di anti-rimbalzo consigliata.
 constexpr uint32_t kPinDebounceMs = 300;

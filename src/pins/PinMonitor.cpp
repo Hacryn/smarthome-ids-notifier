@@ -4,7 +4,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 
-#include "EventTypes.h"
+#include "../events/EventTypes.h"
 
 namespace {
 

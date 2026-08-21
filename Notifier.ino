@@ -1,18 +1,18 @@
 #include <LittleFS.h>
 
 #include "secrets.h"
-#include "src/EventId.h"
-#include "src/EventLogStorage.h"
-#include "src/EventTiming.h"
-#include "src/EventTypes.h"
-#include "src/NetworkIssueTracker.h"
-#include "src/PinDebounce.h"
-#include "src/PinMonitor.h"
-#include "src/RateLimiter.h"
-#include "src/TelegramClient.h"
-#include "src/TimeAnchor.h"
-#include "src/TimeAnchorStorage.h"
-#include "src/WifiManager.h"
+#include "src/events/EventId.h"
+#include "src/events/EventLogStorage.h"
+#include "src/events/EventTiming.h"
+#include "src/events/EventTypes.h"
+#include "src/network/NetworkIssueTracker.h"
+#include "src/network/WifiManager.h"
+#include "src/pins/PinDebounce.h"
+#include "src/pins/PinMonitor.h"
+#include "src/telegram/RateLimiter.h"
+#include "src/telegram/TelegramClient.h"
+#include "src/time/TimeAnchor.h"
+#include "src/time/TimeAnchorStorage.h"
 
 // Sez. 3.4.1 - soglia di durata minima per generare NETWORK_ISSUE (non ancora
 // configurabile da comando: arrivera' con /setnetthreshold in una fase successiva).

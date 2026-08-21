@@ -1,8 +1,8 @@
 #include <cassert>
 #include <cstdio>
 
-#include "../src/RateLimiter.h"
-#include "../src/SendOutcomeClassifier.h"
+#include "../src/telegram/RateLimiter.h"
+#include "../src/telegram/SendOutcomeClassifier.h"
 
 static void test_classify_success() {
   RawSendOutcome outcome{/*isError=*/false, /*isEmpty=*/false, /*errorCode=*/0};

@@ -2,8 +2,8 @@
 #include <cstdio>
 #include <cstring>
 
-#include "../src/EventLog.h"
-#include "../src/EventTypes.h"
+#include "../src/events/EventLog.h"
+#include "../src/events/EventTypes.h"
 
 static const char* kSampleId = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
 
