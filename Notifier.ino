@@ -8,6 +8,8 @@
 #include "src/NetworkIssueTracker.h"
 #include "src/PinDebounce.h"
 #include "src/PinMonitor.h"
+#include "src/RateLimiter.h"
+#include "src/TelegramClient.h"
 #include "src/TimeAnchor.h"
 #include "src/TimeAnchorStorage.h"
 #include "src/WifiManager.h"
@@ -24,6 +26,13 @@ uint32_t g_lastEpochAnchor = 0;
 uint32_t g_lastWrittenTs = 0;
 
 NetworkIssueTracker g_networkIssueTracker;
+
+// Fase 6 - smoke test: un solo invio alla prima connessione WiFi, per
+// verificare manualmente client/classificazione (nessuna coda ancora: arriva
+// in fase 8). RateLimiter usato qui a scopo dimostrativo (un solo invio non
+// lo esercita davvero).
+RateLimiter g_telegramRateLimiter;
+bool g_bootMessageSent = false;
 
 void handleRawTransition(const PinTransition& t) {
   g_debouncers[t.eventTypeIndex].onTransition(t.level, t.millisAtIsr);
@@ -59,6 +68,7 @@ void setup() {
 
   initPinMonitor();
   initWifi(WIFI_SSID, WIFI_PASSWORD);
+  initTelegramClient(TELEGRAM_BOT_TOKEN);
 }
 
 void loop() {
@@ -101,5 +111,12 @@ void loop() {
     logNetworkIssueEvent(EventStatus::START, netEv.ts);
   } else if (netEv.kind == NetworkIssueEvent::Kind::ENDED) {
     logNetworkIssueEvent(EventStatus::END, netEv.ts);
+  }
+
+  if (!g_bootMessageSent && reachable && g_telegramRateLimiter.tryConsume(nowMillis)) {
+    SendOutcomeCategory result = sendTelegramMessage(ONBOARDING_CHAT_ID, "Notifier online (test fase 6)");
+    Serial.print("Test invio Telegram, categoria esito=");
+    Serial.println(static_cast<int>(result));
+    g_bootMessageSent = true;
   }
 }
