@@ -70,3 +70,6 @@ Testing/
 
 # secrets (sez. 4.7 di DESIGN.md) - versionato solo secrets.h.example
 secrets.h
+
+# sketchbook locale arduino-cli (librerie scaricate)
+.arduino-user/
