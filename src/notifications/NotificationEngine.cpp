@@ -4,6 +4,9 @@
 
 #include <string>
 
+#include "../config/TimestampFormatter.h"
+#include "../config/UserConfig.h"
+#include "../config/UserConfigStorage.h"
 #include "../events/EventLogStorage.h"
 #include "../rotation/RotationEngine.h"
 #include "../telegram/RateLimiter.h"
@@ -38,52 +41,46 @@ void setEventId(OutboundMessage& msg, const char* id) {
   msg.eventId[32] = '\0';
 }
 
-// NOTA: formattazione minima, solo per verificare la meccanica di questa
-// fase. La resa leggibile (fuso orario/formato per utente, aggregazione
-// START+END con durata come in sez. 6.7) arriva con le preferenze utente
-// e con /log, che gia' implementera' quella logica di aggregazione (sez.
-// 12.1) - qui non viene duplicata.
-std::string buildEventMessageText(const char* label, EventStatus status, uint32_t ts, bool approx) {
+// NOTA: l'aggregazione START+END con durata come nell'esempio di sez. 6.7
+// non e' replicata qui - quella logica arriva con /log (sez. 12.1), che
+// la implementera' una sola volta e verra' riusata.
+std::string buildEventMessageText(const char* label, EventStatus status,
+                                   const std::string& formattedTs) {
   std::string text = label;
   if (status == EventStatus::START) {
     text += " - inizio";
   } else if (status == EventStatus::END) {
     text += " - fine";
   }
-  text += " (";
-  if (approx) text += "~";
-  text += std::to_string(ts);
-  text += ")";
+  text += " (" + formattedTs + ")";
   return text;
 }
 
-std::string buildRecoveryMessageText(const char* label, uint32_t eventTs,
-                                      const RecoveryPresentation& pres) {
+std::string buildRecoveryMessageText(const char* label, const std::string& formattedTs,
+                                      bool isRecovered) {
   std::string text;
-  if (pres.isRecovered) text += "[recuperata] ";  // sez. 6.4
+  if (isRecovered) text += "[recuperata] ";  // sez. 6.4
   text += label;
-  text += " (";
-  if (pres.isApprox) text += "~";
-  text += std::to_string(eventTs);
-  text += ")";
+  text += " (" + formattedTs + ")";
   return text;
 }
 
-std::string buildAggregatedMessageText(const std::vector<NotificationRecord>& pending) {
+std::string buildAggregatedMessageText(const std::vector<NotificationRecord>& pending,
+                                        const UserConfig& userCfg) {
   std::string text = "[recuperate] " + std::to_string(pending.size()) + " notifiche:\n";
   for (const auto& rec : pending) {
     EventRecord original{};
     bool found = findEventRecordById(rec.id, notifyStatusToEventStatus(rec.status), original);
     const char* label = "Evento";
+    bool approx = true;
     if (found) {
       const EventTypeConfig* cfg = findEventTypeConfig(original.type);
       if (cfg) label = cfg->label;
+      approx = original.approx;
     }
     text += "- ";
     text += label;
-    text += " (";
-    text += std::to_string(rec.ts);
-    text += ")\n";
+    text += " (" + formatTimestampForUser(rec.ts, userCfg, approx) + ")\n";
   }
   return text;
 }
@@ -162,15 +159,22 @@ void notifyEvent(const std::vector<AuthorizedUser>& users, const char* id, Event
                   EventStatus status, uint32_t eventTs, bool eventApprox) {
   const EventTypeConfig* cfg = findEventTypeConfig(type);
   const char* label = cfg ? cfg->label : "Evento";
-  std::string text = buildEventMessageText(label, status, eventTs, eventApprox);
   NotifyStatus notifyStatus = eventStatusToNotifyStatus(status);
+
+  std::vector<UserConfig> userConfigs;
+  loadAllUserConfigs(userConfigs);
 
   for (const auto& user : users) {
     if (user.addedTs > eventTs) continue;  // sez. 4.6
 
+    UserConfig userCfg = findOrDefaultUserConfig(userConfigs, user.chatId);
+    if (!isNotifyEnabledForUser(userCfg, type)) continue;  // sez. 11.2
+
+    std::string formattedTs = formatTimestampForUser(eventTs, userCfg, eventApprox);
+
     OutboundMessage msg;
     msg.chatId = user.chatId;
-    msg.text = text;
+    msg.text = buildEventMessageText(label, status, formattedTs);
     msg.trackDelivery = true;
     setEventId(msg, id);
     msg.notifyStatus = notifyStatus;
@@ -184,15 +188,20 @@ void runRecoveryScan(const std::vector<AuthorizedUser>& users, uint32_t nowMilli
                       uint32_t nowEpoch) {
   if (g_retryTimer.scanInProgress()) return;  // sez. 6.3.1 - richiesta scartata
 
+  std::vector<UserConfig> userConfigs;
+  loadAllUserConfigs(userConfigs);
+
   std::vector<OutboundMessage> scanMessages;
 
   for (const auto& user : users) {
     std::vector<NotificationRecord> pending = pendingFrom(loadNotificationState(user.chatId));
     if (pending.empty()) continue;
 
+    UserConfig userCfg = findOrDefaultUserConfig(userConfigs, user.chatId);
+
     if (shouldAggregate(pending.size(), kAggregateThreshold)) {
       // Sez. 6.7 - un unico messaggio; il tracciamento resta individuale per voce.
-      std::string text = buildAggregatedMessageText(pending);
+      std::string text = buildAggregatedMessageText(pending, userCfg);
       for (const auto& rec : pending) {
         OutboundMessage msg;
         msg.chatId = user.chatId;
@@ -216,10 +225,11 @@ void runRecoveryScan(const std::vector<AuthorizedUser>& users, uint32_t nowMilli
           if (cfg) label = cfg->label;
         }
         RecoveryPresentation pres = decideRecoveryPresentation(nowEpoch, rec.ts, approx, kGracePeriodSec);
+        std::string formattedTs = formatTimestampForUser(rec.ts, userCfg, pres.isApprox);
 
         OutboundMessage msg;
         msg.chatId = user.chatId;
-        msg.text = buildRecoveryMessageText(label, rec.ts, pres);
+        msg.text = buildRecoveryMessageText(label, formattedTs, pres.isRecovered);
         msg.trackDelivery = true;
         msg.isScanMessage = true;
         setEventId(msg, rec.id);

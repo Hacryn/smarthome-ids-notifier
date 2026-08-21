@@ -3,6 +3,9 @@
 #include <LittleFS.h>
 #include <string.h>
 
+#include "../config/TimestampFormatter.h"
+#include "../config/UserConfig.h"
+#include "../config/UserConfigStorage.h"
 #include "../notifications/NotificationEngine.h"
 #include "../notifications/NotificationFolder.h"
 #include "../notifications/NotificationLogStorage.h"
@@ -65,7 +68,8 @@ bool closeOpenEvent(const std::vector<AuthorizedUser>& users, const std::string&
 namespace {
 
 std::string buildSummaryText(const std::vector<OpenEvent>& openEvents,
-                              const std::vector<NotificationRecord>& nearAbandonment) {
+                              const std::vector<NotificationRecord>& nearAbandonment,
+                              const UserConfig& userCfg) {
   std::string text;
 
   if (!openEvents.empty()) {
@@ -74,10 +78,7 @@ std::string buildSummaryText(const std::vector<OpenEvent>& openEvents,
       const EventTypeConfig* cfg = findEventTypeConfig(ev.type);
       text += "- ";
       text += cfg ? cfg->label : "Evento";
-      text += " (";
-      if (ev.approx) text += "~";
-      text += std::to_string(ev.startTs);
-      text += ")\n";
+      text += " (" + formatTimestampForUser(ev.startTs, userCfg, ev.approx) + ")\n";
     }
   }
 
@@ -101,6 +102,9 @@ std::string buildSummaryText(const std::vector<OpenEvent>& openEvents,
 void sendOpenEventsSummary(const std::vector<AuthorizedUser>& users) {
   std::vector<OpenEvent> openEvents = detectOpenEvents();
 
+  std::vector<UserConfig> userConfigs;
+  loadAllUserConfigs(userConfigs);
+
   for (const auto& user : users) {
     auto state = loadNotificationState(user.chatId);
     std::vector<NotificationRecord> nearAbandonment;
@@ -111,7 +115,8 @@ void sendOpenEventsSummary(const std::vector<AuthorizedUser>& users) {
       }
     }
 
-    std::string text = buildSummaryText(openEvents, nearAbandonment);
+    UserConfig userCfg = findOrDefaultUserConfig(userConfigs, user.chatId);
+    std::string text = buildSummaryText(openEvents, nearAbandonment, userCfg);
     if (text.empty()) continue;  // nulla da segnalare a questo utente
 
     if (user.admin) {
