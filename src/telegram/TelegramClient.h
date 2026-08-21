@@ -7,16 +7,16 @@
 
 #include "SendOutcomeClassifier.h"
 
-// Sez. 3.5 - client FastBot2. Non testabile via harness host-side (dipende
-// da WiFi/TLS reali).
+// Sec. 3.5 - FastBot2 client. Not testable via the host-side harness
+// (depends on real WiFi/TLS).
 void initTelegramClient(const char* token);
 
-// Sez. 6.5/6.6 - invia un messaggio e ne classifica l'esito. Gestisce in
-// proprio fino a 3 ritentativi immediati su 429, rispettando retry_after
-// (non contati come fallimento). L'intervallo minimo di 1100ms tra invii
-// (sez. 6.6) NON e' applicato qui: e' responsabilita' del chiamante tramite
-// RateLimiter, cosi' che una coda di invii (fase 8) possa restare non
-// bloccante rispetto al loop.
+// Sec. 6.5/6.6 - sends a message and classifies its outcome. Handles up to
+// 3 immediate retries on 429 internally, honoring retry_after (not
+// counted as a failure). The minimum 1100ms interval between sends (sec.
+// 6.6) is NOT applied here: it's the caller's responsibility via
+// RateLimiter, so a send queue (phase 8) can stay non-blocking with
+// respect to the loop.
 SendOutcomeCategory sendTelegramMessage(int64_t chatId, const char* text);
 
 struct InlineButton {
@@ -24,15 +24,15 @@ struct InlineButton {
   std::string callbackData;
 };
 
-// Sez. 8.1 - invio con tastiera inline, un bottone per riga. Usato solo per
-// il riepilogo eventi aperti destinato agli admin (invio diretto, non
-// tracciato in sez. 7: e' un messaggio di sistema, non la notifica di un
-// evento). Stessa classificazione/retry di sendTelegramMessage.
+// Sec. 8.1 - send with an inline keyboard, one button per row. Used only
+// for the open-events summary sent to admins (direct send, not tracked in
+// sec. 7: it's a system message, not an event notification). Same
+// classification/retry as sendTelegramMessage.
 SendOutcomeCategory sendMessageWithButtons(int64_t chatId, const char* text,
                                             const std::vector<InlineButton>& buttons);
 
-// Sez. 8.1 - tipi primitivi per non far trapelare i tipi FastBot2 fuori da
-// questo modulo (Notifier.ino resta libero di non includere FastBot2.h).
+// Sec. 8.1 - primitive types so FastBot2's own types don't leak outside
+// this module (Notifier.ino stays free of including FastBot2.h).
 struct IncomingCallback {
   int64_t fromChatId;
   std::string queryId;
@@ -47,14 +47,13 @@ struct IncomingCommand {
 using CallbackHandler = void (*)(const IncomingCallback&);
 using CommandHandler = void (*)(const IncomingCommand&);
 
-// Registra i gestori per callback query (bottoni inline) e messaggi di
-// testo in arrivo. Da chiamare una sola volta in setup(), dopo
-// initTelegramClient().
+// Registers the handlers for incoming callback queries (inline buttons)
+// and text messages. Call once in setup(), after initTelegramClient().
 void setTelegramUpdateHandlers(CallbackHandler onCallback, CommandHandler onCommand);
 
-// Da chiamare ad ogni ciclo di loop: elabora gli aggiornamenti in arrivo
-// (long polling, sez. 3.5.1).
+// Call on every loop cycle: processes incoming updates (long polling,
+// sec. 3.5.1).
 void tickTelegramUpdates();
 
-// Sez. 8.1 - risposta immediata alla callback query (rimuove lo spinner).
+// Sec. 8.1 - immediate reply to the callback query (removes the spinner).
 void answerCallback(const std::string& queryId, const std::string& text);

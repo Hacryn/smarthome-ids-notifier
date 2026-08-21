@@ -34,7 +34,7 @@ bool parseEventRecord(const std::string& line, EventRecord& out) {
   out.type = static_cast<EventType>(type.as<uint8_t>());
   out.status = static_cast<EventStatus>(status.as<uint8_t>());
   out.ts = ts.as<uint32_t>();
-  out.approx = doc["a"].as<int>() == 1;  // doc["a"] assente -> 0
+  out.approx = doc["a"].as<int>() == 1;  // doc["a"] absent -> 0
 
   return true;
 }

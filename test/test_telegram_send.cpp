@@ -41,7 +41,7 @@ static void test_classify_system_error() {
 }
 
 static void test_classify_unknown_code_falls_back_to_system_error() {
-  RawSendOutcome outcome{true, false, 418};  // codice non previsto dalla tabella di sez. 6.5
+  RawSendOutcome outcome{true, false, 418};  // code not covered by the table in sec. 6.5
   assert(classifySendOutcome(outcome) == SendOutcomeCategory::SYSTEM_ERROR);
 }
 
@@ -53,13 +53,13 @@ static void test_rate_limiter_allows_first_send_immediately() {
 static void test_rate_limiter_blocks_within_interval() {
   RateLimiter limiter;
   assert(limiter.tryConsume(1000));
-  assert(!limiter.tryConsume(1500));  // 500ms dopo, sotto i 1100ms minimi
+  assert(!limiter.tryConsume(1500));  // 500ms later, below the 1100ms minimum
 }
 
 static void test_rate_limiter_allows_after_interval() {
   RateLimiter limiter;
   assert(limiter.tryConsume(1000));
-  assert(limiter.tryConsume(2100));  // esattamente 1100ms dopo
+  assert(limiter.tryConsume(2100));  // exactly 1100ms later
 }
 
 int main() {
@@ -74,6 +74,6 @@ int main() {
   test_rate_limiter_blocks_within_interval();
   test_rate_limiter_allows_after_interval();
 
-  printf("test_telegram_send: tutti i test superati\n");
+  printf("test_telegram_send: all tests passed\n");
   return 0;
 }

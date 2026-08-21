@@ -4,7 +4,7 @@
 #include "../src/time/TimeAnchor.h"
 
 static void test_estimate_timestamp() {
-  // last_epoch salvato a 1755500000, 90 secondi trascorsi dal boot.
+  // last_epoch saved as 1755500000, 90 seconds elapsed since boot.
   uint32_t ts = estimateTimestamp(1755500000, 90000);
   assert(ts == 1755500090);
 }
@@ -21,7 +21,7 @@ static void test_clamp_not_needed_when_increasing() {
 }
 
 static void test_clamp_applied_when_going_backwards() {
-  // Correzione NTP all'indietro: il candidato e' anteriore all'ultima riga scritta.
+  // Backward NTP correction: the candidate is earlier than the last row written.
   ClampedTimestamp result = applyMonotonicClamp(1755499000, 1755500000);
   assert(result.ts == 1755500000);
   assert(result.wasClamped);
@@ -47,6 +47,6 @@ int main() {
   test_clamp_equal_is_not_clamped();
   test_should_persist_anchor_threshold();
 
-  printf("test_time_anchor: tutti i test superati\n");
+  printf("test_time_anchor: all tests passed\n");
   return 0;
 }

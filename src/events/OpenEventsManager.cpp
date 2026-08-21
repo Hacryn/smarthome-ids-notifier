@@ -35,6 +35,24 @@ std::vector<OpenEvent> detectOpenEvents() {
   return findOpenEvents(rows);
 }
 
+bool findOpenEventOfType(EventType type, OpenEvent& out) {
+  std::vector<EventRecord> rows;
+
+  File f = LittleFS.open(kEventLogPath, "r");
+  if (!f) return false;
+
+  while (f.available()) {
+    String line = f.readStringUntil('\n');
+    if (line.length() == 0) continue;
+
+    EventRecord rec{};
+    if (parseEventRecord(std::string(line.c_str()), rec)) rows.push_back(rec);
+  }
+  f.close();
+
+  return findMostRecentOpenEventForType(rows, type, out);
+}
+
 bool closeOpenEvent(const std::vector<AuthorizedUser>& users, const std::string& id,
                      uint32_t closeTs, uint32_t& lastWrittenTs) {
   std::vector<OpenEvent> open = detectOpenEvents();
@@ -45,7 +63,7 @@ bool closeOpenEvent(const std::vector<AuthorizedUser>& users, const std::string&
       break;
     }
   }
-  if (!match) return false;  // gia' chiuso, o mai esistito
+  if (!match) return false;  // already closed, or never existed
 
   ClampedTimestamp clamped = applyMonotonicClamp(closeTs, lastWrittenTs);
 
@@ -55,7 +73,7 @@ bool closeOpenEvent(const std::vector<AuthorizedUser>& users, const std::string&
   rec.type = match->type;
   rec.status = EventStatus::END;
   rec.ts = clamped.ts;
-  rec.approx = !isTimeSynced() || clamped.wasClamped;  // sez. 5.4.2/5.4.3
+  rec.approx = !isTimeSynced() || clamped.wasClamped;  // sec. 5.4.2/5.4.3
 
   if (!appendEventRecord(rec)) return false;
   lastWrittenTs = clamped.ts;
@@ -120,7 +138,7 @@ void sendOpenEventsSummary(const std::vector<AuthorizedUser>& users) {
 
     UserConfig userCfg = findOrDefaultUserConfig(userConfigs, user.chatId);
     std::string text = buildSummaryText(openEvents, nearAbandonment, userCfg);
-    if (text.empty()) continue;  // nulla da segnalare a questo utente
+    if (text.empty()) continue;  // nothing to report to this user
 
     if (user.admin) {
       std::vector<InlineButton> buttons;

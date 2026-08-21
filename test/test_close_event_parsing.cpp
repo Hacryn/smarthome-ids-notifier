@@ -9,7 +9,7 @@ static const char* kId = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
 static void test_callback_data_roundtrip() {
   std::string data = closeEventCallbackData(kId);
   assert(data == "c:a1b2c3d4e5f60718293a4b5c6d7e8f90");
-  assert(data.size() == 34);  // sez. 8.1 - entro il limite di 64 byte
+  assert(data.size() == 34);  // sec. 8.1 - within the 64-byte limit
 
   std::string parsedId;
   assert(parseCloseEventCallbackData(data, parsedId));
@@ -39,7 +39,7 @@ static void test_close_event_command_with_timestamp() {
 
 static void test_close_event_command_without_timestamp() {
   std::string id;
-  bool hasTs = true;  // deve essere azzerato dalla funzione
+  bool hasTs = true;  // must be cleared by the function
   uint32_t ts = 0;
   std::string text = std::string("/closeevent ") + kId;
   assert(parseCloseEventCommand(text, id, hasTs, ts));
@@ -79,6 +79,6 @@ int main() {
   test_close_event_command_rejects_wrong_id_length();
   test_close_event_command_rejects_non_numeric_timestamp();
 
-  printf("test_close_event_parsing: tutti i test superati\n");
+  printf("test_close_event_parsing: all tests passed\n");
   return 0;
 }

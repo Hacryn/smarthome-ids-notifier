@@ -34,9 +34,9 @@ void rotateEverything(const std::vector<AuthorizedUser>& users, uint32_t nowEpoc
                        uint32_t retentionWeeks) {
   uint32_t cutoff = retentionCutoff(nowEpoch, retentionWeeks);
 
-  // Sez. 9.3.2 - il timestamp NVS avanza solo se la rotazione del log
-  // eventi non e' fallita; un fallimento sui singoli file di notifica non
-  // blocca il ciclo (verranno ritentati alla rotazione successiva).
+  // Sec. 9.3.2 - the NVS timestamp advances only if the event log rotation
+  // didn't fail; a failure on individual notification files doesn't block
+  // the cycle (they'll be retried at the next rotation).
   int cycles = rotateEventLog(cutoff);
   if (cycles >= 0) {
     saveLastRotationEpoch(nowEpoch);

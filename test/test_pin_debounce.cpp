@@ -8,7 +8,7 @@ static void test_poll_before_threshold_returns_false() {
   PinDebouncer d;
   d.onTransition(1, 1000);
   DebouncedTransition out;
-  assert(!d.poll(1200, 300, out));  // 200ms trascorsi, sotto soglia 300ms
+  assert(!d.poll(1200, 300, out));  // 200ms elapsed, below the 300ms threshold
 }
 
 static void test_poll_after_threshold_confirms() {
@@ -25,18 +25,18 @@ static void test_poll_confirms_only_once() {
   d.onTransition(1, 1000);
   DebouncedTransition out;
   assert(d.poll(1300, 300, out));
-  assert(!d.poll(1400, 300, out));  // nessuna transizione pendente
+  assert(!d.poll(1400, 300, out));  // no pending transition
 }
 
 static void test_bounce_resets_window_and_final_level_wins() {
   PinDebouncer d;
-  d.onTransition(1, 1000);  // rimbalzo iniziale
-  d.onTransition(0, 1100);  // rimbalzo entro 300ms: sostituisce il pendente
+  d.onTransition(1, 1000);  // initial bounce
+  d.onTransition(0, 1100);  // bounce within 300ms: replaces the pending one
   DebouncedTransition out;
-  assert(!d.poll(1200, 300, out));  // solo 100ms dall'ultimo rimbalzo
+  assert(!d.poll(1200, 300, out));  // only 100ms since the last bounce
 
-  assert(d.poll(1400, 300, out));  // 300ms dall'ultimo rimbalzo (a 1100)
-  assert(out.level == 0);          // vince l'ultimo livello, non il primo
+  assert(d.poll(1400, 300, out));  // 300ms since the last bounce (at 1100)
+  assert(out.level == 0);          // the last level wins, not the first
   assert(out.millisAtIsr == 1100);
 }
 
@@ -51,7 +51,7 @@ static void test_resolve_pin_event_status_active_high() {
 }
 
 static void test_compute_retroactive_timestamp() {
-  // Bloccati 10s in un timeout di rete: l'evento va datato all'istante ISR, non ora.
+  // Blocked 10s in a network timeout: the event must be dated to the ISR instant, not now.
   uint32_t ts = computeRetroactiveTimestamp(/*epochNow=*/1000, /*millisNow=*/15000,
                                              /*millisAtIsr=*/5000);
   assert(ts == 990);
@@ -72,6 +72,6 @@ int main() {
   test_compute_retroactive_timestamp();
   test_compute_retroactive_timestamp_no_delay();
 
-  printf("test_pin_debounce: tutti i test superati\n");
+  printf("test_pin_debounce: all tests passed\n");
   return 0;
 }

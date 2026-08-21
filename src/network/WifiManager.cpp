@@ -23,11 +23,11 @@ void initWifi(const char* ssid, const char* password) {
 
 void tickWifi(uint32_t nowMillis) {
   if (WiFi.status() == WL_CONNECTED) {
-    g_attemptNumber = 0;  // sez. 3.4.2 - il contatore si azzera alla riconnessione riuscita
+    g_attemptNumber = 0;  // sec. 3.4.2 - the counter resets on a successful reconnection
     return;
   }
 
-  if (static_cast<int32_t>(nowMillis - g_nextAttemptMillis) < 0) return;  // in attesa del backoff
+  if (static_cast<int32_t>(nowMillis - g_nextAttemptMillis) < 0) return;  // waiting on backoff
 
   g_attemptNumber++;
   if (shouldForceFullReconnect(g_attemptNumber)) {

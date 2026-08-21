@@ -22,7 +22,7 @@ bool appendEventRecord(const EventRecord& rec) {
   std::string line = serializeEventRecord(rec) + "\n";
 
   if (writeEventLine(line)) return true;
-  if (writeEventLine(line)) return true;  // sez. 9.4 - un solo retry
+  if (writeEventLine(line)) return true;  // sec. 9.4 - a single retry
 
   fsErrorCounter().recordFailure();
   return false;
@@ -38,8 +38,8 @@ uint32_t readLastWrittenTimestamp() {
     return 0;
   }
 
-  // Salta l'eventuale newline finale, poi risale fino al newline precedente
-  // (o all'inizio del file) per isolare l'ultima riga completa.
+  // Skip a possible trailing newline, then walk back to the previous
+  // newline (or the start of the file) to isolate the last complete row.
   long pos = size - 1;
   f.seek(pos);
   if (f.peek() == '\n') pos--;

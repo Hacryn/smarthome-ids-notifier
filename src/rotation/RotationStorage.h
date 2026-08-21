@@ -2,10 +2,10 @@
 
 #include <stdint.h>
 
-// Sez. 9.2/9.3.2 - persistenza NVS del timestamp dell'ultima rotazione
-// eseguita. Aggiornato solo DOPO che il rename atomico e' andato a buon
-// fine (sez. 9.3.2): un blackout nella finestra intermedia provoca al piu'
-// la ripetizione di una rotazione gia' fatta, operazione idempotente.
-// Non testabile via harness host-side (dipende da NVS reale).
+// Sec. 9.2/9.3.2 - NVS persistence of the last rotation's timestamp.
+// Updated only AFTER the atomic rename has succeeded (sec. 9.3.2): a
+// blackout in the intermediate window at most causes a rotation already
+// done to be repeated, an idempotent operation. Not testable via the
+// host-side harness (depends on real NVS).
 uint32_t loadLastRotationEpoch();
 void saveLastRotationEpoch(uint32_t epoch);

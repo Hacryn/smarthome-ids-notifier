@@ -2,15 +2,15 @@
 
 #include <stdint.h>
 
-// Sez. 9.3 - riscrittura filtrata di log.jsonl (LittleFS non supporta la
-// cancellazione selettiva di righe). Non testabile via harness host-side
-// (dipende da LittleFS reale); l'algoritmo di raccolta id (DeletableIdCollector)
-// e' testato separatamente.
+// Sec. 9.3 - filtered rewrite of log.jsonl (LittleFS doesn't support
+// selective row deletion). Not testable via the host-side harness (depends
+// on real LittleFS); the id-collection algorithm (DeletableIdCollector) is
+// tested separately.
 
-// Ritorna il numero di cicli passata1+passata2+commit eseguiti (0 se non
-// c'era nulla da eliminare), o -1 se una scrittura/rinomina e' fallita.
+// Returns the number of pass1+pass2+commit cycles executed (0 if there was
+// nothing to delete), or -1 if a write/rename failed.
 int rotateEventLog(uint32_t cutoff);
 
-// Sez. 9.3.2 - rimuove un eventuale file temporaneo residuo di una
-// rotazione interrotta da un blackout. Da chiamare in setup().
+// Sec. 9.3.2 - removes any leftover temp file from a rotation interrupted
+// by a blackout. Call in setup().
 void cleanupStaleEventLogRotation();

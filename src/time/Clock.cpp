@@ -16,9 +16,9 @@ uint32_t g_lastAnchorPersistMillis = 0;
 void initClock() { g_anchorEpoch = loadLastEpoch(); }
 
 void beginNtpSync() {
-  // Sez. 10.2/13 - offset zero: l'orologio di sistema resta sempre in UTC,
-  // coerentemente con sez. 5.3 (i timestamp si convertono in ora locale
-  // solo in visualizzazione, mai qui).
+  // Sec. 10.2/13 - zero offset: the system clock always stays in UTC,
+  // consistent with sec. 5.3 (timestamps are converted to local time only
+  // at display time, never here).
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 }
 
@@ -29,14 +29,14 @@ void tickClock(uint32_t nowMillis) {
 
     g_synced = true;
     g_anchorEpoch = nowRaw;
-    saveLastEpoch(g_anchorEpoch);  // sez. 5.4.1 - subito dopo il sync riuscito
+    saveLastEpoch(g_anchorEpoch);  // sec. 5.4.1 - right after a successful sync
     g_lastAnchorPersistMillis = nowMillis;
     return;
   }
 
   if (shouldPersistAnchor(nowMillis - g_lastAnchorPersistMillis)) {
     g_anchorEpoch = currentEpoch();
-    saveLastEpoch(g_anchorEpoch);  // sez. 5.4.1 - ogni 10 minuti mentre l'orario e' valido
+    saveLastEpoch(g_anchorEpoch);  // sec. 5.4.1 - every 10 minutes while time stays valid
     g_lastAnchorPersistMillis = nowMillis;
   }
 }
@@ -47,7 +47,7 @@ uint32_t currentEpoch() {
   if (g_synced) {
     uint32_t nowRaw = static_cast<uint32_t>(time(nullptr));
     if (isEpochPlausible(nowRaw)) return nowRaw;
-    g_synced = false;  // l'orario di sistema e' tornato implausibile (difensivo, raro)
+    g_synced = false;  // system time became implausible again (defensive, rare)
   }
   return estimateTimestamp(g_anchorEpoch, millis());
 }

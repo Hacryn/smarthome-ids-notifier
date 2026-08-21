@@ -5,12 +5,12 @@
 
 static void test_epoch_near_zero_not_plausible() {
   assert(!isEpochPlausible(0));
-  assert(!isEpochPlausible(3600));  // poche ore dopo l'epoch, orologio mai sincronizzato
+  assert(!isEpochPlausible(3600));  // a few hours past the epoch, clock never synced
 }
 
 static void test_epoch_at_and_above_threshold_plausible() {
   assert(isEpochPlausible(kPlausibleEpochThreshold));
-  assert(isEpochPlausible(1755500000));  // agosto 2026, data di sviluppo del progetto
+  assert(isEpochPlausible(1755500000));  // August 2026, this project's development date
 }
 
 static void test_epoch_just_below_threshold_not_plausible() {
@@ -22,6 +22,6 @@ int main() {
   test_epoch_at_and_above_threshold_plausible();
   test_epoch_just_below_threshold_not_plausible();
 
-  printf("test_clock_policy: tutti i test superati\n");
+  printf("test_clock_policy: all tests passed\n");
   return 0;
 }

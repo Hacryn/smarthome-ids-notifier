@@ -13,7 +13,7 @@ static void test_set_notify_disabled_then_enabled() {
   UserConfig cfg;
   setNotifyEnabled(cfg, EventType::ALARM_GARAGE, false);
   assert(!isNotifyEnabledForUser(cfg, EventType::ALARM_GARAGE));
-  assert(isNotifyEnabledForUser(cfg, EventType::ALARM_INTERNAL));  // altri tipi non toccati
+  assert(isNotifyEnabledForUser(cfg, EventType::ALARM_INTERNAL));  // other types untouched
 
   setNotifyEnabled(cfg, EventType::ALARM_GARAGE, true);
   assert(isNotifyEnabledForUser(cfg, EventType::ALARM_GARAGE));
@@ -22,7 +22,7 @@ static void test_set_notify_disabled_then_enabled() {
 static void test_set_notify_is_idempotent() {
   UserConfig cfg;
   setNotifyEnabled(cfg, EventType::ALARM_GARAGE, false);
-  setNotifyEnabled(cfg, EventType::ALARM_GARAGE, false);  // gia' disabilitato
+  setNotifyEnabled(cfg, EventType::ALARM_GARAGE, false);  // already disabled
   assert(cfg.disabledTypes.size() == 1);
 }
 
@@ -42,7 +42,7 @@ static void test_serialize_roundtrip() {
   setNotifyEnabled(a, EventType::NETWORK_ISSUE, false);
 
   UserConfig b;
-  b.chatId = -1001234567890LL;  // sez. 4.2 - id di gruppo, negativo
+  b.chatId = -1001234567890LL;  // sec. 4.2 - group id, negative
 
   std::string json = serializeUserConfigs({a, b});
 
@@ -57,7 +57,7 @@ static void test_serialize_roundtrip() {
   assert(isNotifyEnabledForUser(parsedA, EventType::ALARM_GARAGE));
 
   UserConfig parsedB = findOrDefaultUserConfig(parsed, -1001234567890LL);
-  assert(parsedB.timezone == TimezonePreset::UTC);  // default, mai impostato
+  assert(parsedB.timezone == TimezonePreset::UTC);  // default, never set
 }
 
 static void test_parse_empty_json_is_no_configs() {
@@ -80,6 +80,6 @@ int main() {
   test_parse_empty_json_is_no_configs();
   test_parse_rejects_malformed_json();
 
-  printf("test_user_config: tutti i test superati\n");
+  printf("test_user_config: all tests passed\n");
   return 0;
 }

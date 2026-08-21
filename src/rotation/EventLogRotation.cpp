@@ -15,9 +15,9 @@ int rotateEventLog(uint32_t cutoff) {
   while (capped) {
     DeletableIdCollector collector(cutoff);
 
-    // Passata 1 (sez. 9.3.1) - raccolta in streaming, nessun file in memoria.
+    // Pass 1 (sec. 9.3.1) - streaming collection, no file held in memory.
     File src = LittleFS.open(kEventLogPath, "r");
-    if (!src) return cycles;  // nessun log da ruotare
+    if (!src) return cycles;  // no log to rotate
     while (src.available()) {
       String line = src.readStringUntil('\n');
       if (line.length() == 0) continue;
@@ -27,9 +27,9 @@ int rotateEventLog(uint32_t cutoff) {
     }
     src.close();
 
-    if (collector.ids().empty()) break;  // nulla da eliminare, fine
+    if (collector.ids().empty()) break;  // nothing to delete, done
 
-    // Passata 2 - riscrittura filtrata su file temporaneo.
+    // Pass 2 - filtered rewrite to a temporary file.
     File srcAgain = LittleFS.open(kEventLogPath, "r");
     File tmp = LittleFS.open(kEventLogRotationTmpPath, "w");
     if (!srcAgain || !tmp) return -1;
@@ -40,8 +40,8 @@ int rotateEventLog(uint32_t cutoff) {
       if (line.length() == 0) continue;
 
       EventRecord rec{};
-      if (!parseEventRecord(std::string(line.c_str()), rec)) continue;  // riga corrotta, scartata
-      if (collector.contains(rec.id)) continue;  // eliminabile
+      if (!parseEventRecord(std::string(line.c_str()), rec)) continue;  // corrupted row, discarded
+      if (collector.contains(rec.id)) continue;  // deletable
 
       std::string outLine = serializeEventRecord(rec) + "\n";
       size_t written = tmp.print(outLine.c_str());
@@ -53,14 +53,14 @@ int rotateEventLog(uint32_t cutoff) {
     srcAgain.close();
     tmp.close();
 
-    // Sez. 9.3.2 - rename atomico prima, timestamp NVS aggiornato dopo (dal chiamante).
+    // Sec. 9.3.2 - atomic rename first, NVS timestamp updated after (by the caller).
     if (!writeOk || !LittleFS.rename(kEventLogRotationTmpPath, kEventLogPath)) {
       fsErrorCounter().recordFailure();
       return -1;
     }
 
     cycles++;
-    capped = collector.capReached();  // sez. 9.3.1 - ripete solo se il tetto e' stato raggiunto
+    capped = collector.capReached();  // sec. 9.3.1 - repeats only if the cap was reached
   }
 
   return cycles;

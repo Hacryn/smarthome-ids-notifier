@@ -32,3 +32,16 @@ std::vector<OpenEvent> findOpenEvents(const std::vector<EventRecord>& rows) {
   }
   return result;
 }
+
+bool findMostRecentOpenEventForType(const std::vector<EventRecord>& rows, EventType type,
+                                    OpenEvent& out) {
+  bool found = false;
+  for (const OpenEvent& ev : findOpenEvents(rows)) {
+    if (ev.type != type) continue;
+    if (!found || ev.startTs > out.startTs) {
+      out = ev;
+      found = true;
+    }
+  }
+  return found;
+}

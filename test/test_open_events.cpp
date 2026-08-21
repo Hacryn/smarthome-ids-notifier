@@ -57,12 +57,27 @@ static void test_instant_event_never_open() {
   assert(findOpenEvents(rows).empty());
 }
 
+static void test_most_recent_open_event_is_selected_per_type() {
+  std::vector<EventRecord> rows(2);
+  setRec(rows[0], "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", EventType::ALARM_GENERAL,
+         EventStatus::START, 1000);
+  setRec(rows[1], "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", EventType::ALARM_GENERAL,
+         EventStatus::START, 1100);
+
+  OpenEvent out{};
+  assert(findMostRecentOpenEventForType(rows, EventType::ALARM_GENERAL, out));
+  assert(strcmp(out.id, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") == 0);
+  assert(out.startTs == 1100);
+  assert(!findMostRecentOpenEventForType(rows, EventType::POWER_LOSS, out));
+}
+
 int main() {
   test_start_without_end_is_open();
   test_start_with_end_is_not_open();
   test_multiple_ids_tracked_independently();
   test_instant_event_never_open();
+  test_most_recent_open_event_is_selected_per_type();
 
-  printf("test_open_events: tutti i test superati\n");
+  printf("test_open_events: all tests passed\n");
   return 0;
 }

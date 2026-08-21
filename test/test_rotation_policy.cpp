@@ -31,8 +31,8 @@ static void test_space_status_zero_total_is_normal() {
 
 static void test_fs_error_counter_first_failure_flag() {
   FsErrorCounter counter;
-  assert(counter.recordFailure());   // primo errore
-  assert(!counter.recordFailure());  // secondo, non piu' "primo"
+  assert(counter.recordFailure());   // first error
+  assert(!counter.recordFailure());  // second, no longer "first"
   assert(counter.count() == 2);
 }
 
@@ -43,6 +43,6 @@ int main() {
   test_space_status_zero_total_is_normal();
   test_fs_error_counter_first_failure_flag();
 
-  printf("test_rotation_policy: tutti i test superati\n");
+  printf("test_rotation_policy: all tests passed\n");
   return 0;
 }

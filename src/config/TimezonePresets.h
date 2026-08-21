@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 
-// Sez. 10.1 - set di preset predefiniti, mappati a stringhe TZ POSIX.
+// Sec. 10.1 - set of predefined presets, mapped to POSIX TZ strings.
 enum class TimezonePreset : uint8_t {
   UTC = 0,
   EUROPE_ROME = 1,
@@ -17,8 +17,8 @@ enum class TimezonePreset : uint8_t {
 
 struct TimezonePresetInfo {
   TimezonePreset preset;
-  const char* name;     // usato dal comando /settimezone (sez. 12)
-  const char* posixTz;  // sez. 10.1/10.2 - gestisce DST automaticamente
+  const char* name;     // used by the /settimezone command (sec. 12)
+  const char* posixTz;  // sec. 10.1/10.2 - handles DST automatically
 };
 
 inline const TimezonePresetInfo TIMEZONE_PRESETS[] = {

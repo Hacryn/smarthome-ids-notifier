@@ -60,7 +60,7 @@ static void test_parse_rejects_malformed_json() {
 static void test_parse_rejects_missing_field() {
   EventRecord out{};
   std::string line = "{\"id\":\"" + std::string(kSampleId) + "\",\"type\":0,\"status\":2}";
-  assert(!parseEventRecord(line, out));  // manca "ts"
+  assert(!parseEventRecord(line, out));  // missing "ts"
 }
 
 static void test_parse_rejects_wrong_id_length() {
@@ -89,7 +89,7 @@ static void test_event_type_lookup_by_command_name() {
 }
 
 static void test_should_notify_for_status() {
-  // sez. 3.2.3 - NETWORK_ISSUE notifica solo END.
+  // sec. 3.2.3 - NETWORK_ISSUE notifies only END.
   assert(!shouldNotifyForStatus(NotifyPolicy::ONLY_END, EventStatus::START));
   assert(shouldNotifyForStatus(NotifyPolicy::ONLY_END, EventStatus::END));
 
@@ -112,6 +112,6 @@ int main() {
   test_event_type_lookup_by_command_name();
   test_should_notify_for_status();
 
-  printf("test_event_log: tutti i test superati\n");
+  printf("test_event_log: all tests passed\n");
   return 0;
 }

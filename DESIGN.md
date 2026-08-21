@@ -1,161 +1,161 @@
-# Sistema di Monitoraggio Allarme Bentel con Notifiche Telegram
-## Documento di Design, Requisiti e Specifiche Tecniche
+# Bentel Alarm Monitoring System with Telegram Notifications
+## Design, Requirements, and Technical Specification Document
 
-**Versione:** 1.00
-**Data:** Agosto 2026
-**Piattaforma target:** Arduino Nano ESP32
-
----
-
-## 1. Obiettivo del sistema
-
-Realizzare un sistema che monitori lo stato di una centralina d'allarme Bentel tramite Arduino Nano ESP32, invii notifiche in tempo reale su Telegram all'apertura/chiusura di eventi (allarme, riavvio, problemi di rete, interruzione di corrente, ecc.), e mantenga un registro storico persistente e consultabile degli eventi, con gestione robusta di interruzioni di connettività e di alimentazione, accesso limitato a utenti autorizzati e preferenze configurabili per singolo utente.
-
-**Nota sull'alimentazione**: l'Arduino sarà alimentato dalla centralina d'allarme, che dispone di batteria tampone in caso di interruzione elettrica. I riavvii per mancanza di corrente sono quindi previsti come **eventi rari**; le interruzioni di **sola connettività di rete** (router/ISP, non necessariamente su batteria) restano invece il caso di guasto più plausibile e frequente, e sono quelle per cui il sistema di recupero notifiche è principalmente pensato.
-
-### 1.1 Vincolo architetturale: indipendenza da sistemi esterni
-
-Il dispositivo è **volutamente autonomo**: non dipende da alcun broker MQTT, sistema di home automation (Home Assistant o simili) o server locale. L'ESP32 parla direttamente alle API di Telegram e gestisce in proprio persistenza, storico, retry, utenti e preferenze.
-
-Questa scelta è deliberata e motiva la complessità delle sezioni 4-11 (che in presenza di un sistema a monte sarebbero in gran parte delegabili): **accorciare la catena di guasto tra il rilevamento dell'allarme e il telefono dell'utente**. Ogni componente intermedio sarebbe un ulteriore punto di rottura tra l'evento e la notifica, inaccettabile in un sistema di sicurezza.
-
-Corollario: il sistema non ha alcun osservatore esterno che possa accorgersi di un suo guasto totale. La verifica dello stato è **manuale**, tramite il comando `/status` (sezione 12) — scelta consapevole, preferita a un heartbeat periodico automatico che genererebbe messaggi ricorrenti non desiderati.
+**Version:** 1.00
+**Date:** August 2026
+**Target platform:** Arduino Nano ESP32
 
 ---
 
-## 2. Requisiti hardware
+## 1. System objective
 
-### 2.1 Lettura dello stato allarme
+Build a system that monitors the status of a Bentel alarm control panel via an Arduino Nano ESP32, sends real-time Telegram notifications on event open/close (alarm, reboot, network issues, power loss, etc.), and maintains a persistent, queryable historical log of events, with robust handling of connectivity and power interruptions, access restricted to authorized users, and per-user configurable preferences.
 
-La centralina Bentel espone uscite PGM (programmabili) configurabili come indicatori di stato. **Le PGM utilizzate sono configurate in uscita a relè (contatto pulito NA/NC)**: collegamento diretto ai pin dell'ESP32, senza necessità di isolamento aggiuntivo, dato che il contatto è meccanicamente isolato dal circuito della centralina. Il pin di lettura va configurato in `INPUT_PULLUP`, con logica invertibile a seconda che si usi il contatto NA o NC (campo `active_low` della tabella di sezione 3.2.1).
+**Note on power supply**: the Arduino will be powered by the alarm control panel, which has a backup battery in case of a power outage. Reboots due to power loss are therefore expected to be **rare events**; interruptions of **connectivity alone** (router/ISP, not necessarily on battery) remain the most plausible and frequent failure case, and are the ones the notification recovery system is primarily designed for.
 
-**Nota sui contatti NC e i pin di boot**: un contatto NC (normalmente chiuso, si apre in allarme) porta il pin a livello LOW a riposo. Se il pin scelto è uno strapping pin dell'ESP32-S3, questo livello a riposo può interferire con la sequenza di avvio. Va quindi preferito, dove possibile, il contatto NA (normalmente aperto, riposa a livello HIGH grazie al pull-up) sugli eventuali pin di boot, oppure va evitato di cablare su quei pin specifici una zona configurata NC. La lista degli strapping pin del Nano ESP32 va verificata sul pinout ufficiale in fase di assegnazione dei pin.
+### 1.1 Architectural constraint: independence from external systems
 
-**Nota — più tipologie di evento, più input fisici**: con l'introduzione di più tipologie di evento legate a contatti distinti sulla centralina (allarme interno, allarme garage, mancanza rete), è probabile che servano **più uscite PGM dedicate** sulla centralina (una per zona/condizione da monitorare separatamente), e di conseguenza **un pin di lettura ESP32 per ciascuna**. Il numero di pin digitali disponibili sul Nano ESP32 e la disponibilità di uscite PGM configurabili sulla centralina vanno verificati in base al numero finale di tipologie da monitorare. Per "interruzione di corrente" in particolare, molte centraline Bentel espongono una PGM dedicata a "guasto rete / 230V mancante", attiva mentre il sistema resta alimentato dalla batteria tampone.
+The device is **deliberately autonomous**: it does not depend on any MQTT broker, home automation system (Home Assistant or similar), or local server. The ESP32 talks directly to the Telegram API and handles persistence, history, retry, users, and preferences on its own.
+
+This choice is deliberate and motivates the complexity of sections 4-11 (which, in the presence of an upstream system, would largely be delegable): **shortening the failure chain between alarm detection and the user's phone**. Every intermediate component would be an additional point of failure between the event and the notification, unacceptable in a security system.
+
+Corollary: the system has no external observer that could notice a total failure of its own. State verification is **manual**, via the `/status` command (section 12) — a conscious choice, preferred over an automatic periodic heartbeat that would generate unwanted recurring messages.
+
+---
+
+## 2. Hardware requirements
+
+### 2.1 Reading alarm state
+
+The Bentel panel exposes configurable PGM (programmable) outputs usable as status indicators. **The PGMs used are configured as relay outputs (dry NA/NC contact)**: direct connection to the ESP32 pins, with no need for additional isolation, since the contact is mechanically isolated from the panel's circuitry. The reading pin must be configured as `INPUT_PULLUP`, with invertible logic depending on whether an NA or NC contact is used (`active_low` field in the table in section 3.2.1).
+
+**Note on NC contacts and boot pins**: an NC contact (normally closed, opens on alarm) holds the pin at LOW at rest. If the chosen pin is an ESP32-S3 strapping pin, this resting level can interfere with the boot sequence. Where possible, an NA contact (normally open, rests at HIGH thanks to the pull-up) should therefore be preferred on any boot pins, or wiring an NC-configured zone to those specific pins should be avoided. The list of Nano ESP32 strapping pins must be checked against the official pinout when assigning pins.
+
+**Note — more event types, more physical inputs**: with the introduction of multiple event types tied to distinct contacts on the panel (internal alarm, garage alarm, power loss), it's likely that **more dedicated PGM outputs** will be needed on the panel (one per zone/condition to be monitored separately), and consequently **one ESP32 reading pin per each**. The number of digital pins available on the Nano ESP32 and the availability of configurable PGM outputs on the panel must be checked against the final number of types to be monitored. For "power loss" in particular, many Bentel panels expose a dedicated PGM for "mains fault / 230V missing", active while the system is still powered by the backup battery.
 
 ### 2.2 Debounce
 
-È necessario un meccanismo di anti-rimbalzo software (soglia consigliata: 300 ms) per evitare falsi trigger sulle transizioni di stato del segnale. L'implementazione è vincolata dal modello di concorrenza descritto in sezione 3.3: il debounce **non può essere realizzato con polling nel loop principale**, perché il loop viene bloccato per secondi dalle chiamate di rete.
+A software debounce mechanism (recommended threshold: 300 ms) is needed to avoid false triggers on signal state transitions. The implementation is constrained by the concurrency model described in section 3.3: debounce **cannot be implemented by polling in the main loop**, because the loop is blocked for seconds by network calls.
 
 ---
 
-## 3. Architettura software
+## 3. Software architecture
 
-### 3.1 Componenti principali
+### 3.1 Main components
 
-| Componente | Responsabilità |
+| Component | Responsibility |
 |---|---|
-| Lettura pin allarme (ISR + coda) | Rilevamento delle transizioni via interrupt, con debounce e datazione differita (sezione 3.3) |
-| Client Telegram (FastBot2) | Invio notifiche, ricezione comandi e callback dei bottoni inline; espone nativamente l'esito strutturato di ogni invio (sezione 3.5, 6.5) |
-| Sincronizzazione NTP + gestione timezone | Ottenimento timestamp reali (epoch Unix, UTC) e conversione in ora locale con gestione automatica dell'ora legale |
-| Ancora oraria persistente (NVS) | Mantenimento di un riferimento temporale utilizzabile prima della sincronizzazione NTP (sezione 5.4) |
-| Gestione connettività e riconnessione | Backoff esponenziale, rilevamento della condizione `NETWORK_ISSUE` (sezione 3.4) |
-| Registro eventi (LittleFS, `log.jsonl`) | Persistenza storico eventi (solo rilevamento, non notifiche) |
-| Registro notifiche per utente (LittleFS) | Tracciamento degli invii mancati/da recuperare, un file per chat (architettura decisa, vedi sezione 7) |
-| Gestione utenti e permessi (whitelist) | Autorizzazione dei `chat_id`, distinzione utente standard/admin, filtro destinatari delle notifiche |
-| Gestione configurazione globale (NVS) | Impostazioni di sistema persistenti, modificabili solo da utenti admin |
-| Gestione configurazione per utente (LittleFS) | Preferenze individuali (formato data, timezone, tipi di evento notificati) |
-| Motore di recupero notifiche | Rilevamento e reinvio notifiche non consegnate, con grace period e retry programmato |
-| Rate limiter di invio | Rispetto dei limiti di frequenza delle API Telegram (sezione 6.6) |
-| Motore di rotazione | Pulizia periodica del registro eventi e del registro notifiche |
-| Sorveglianza del filesystem | Monitoraggio dello spazio e degli errori di scrittura su LittleFS (sezione 9.4) |
+| Alarm pin reading (ISR + queue) | Transition detection via interrupt, with debounce and deferred dating (section 3.3) |
+| Telegram client (FastBot2) | Sending notifications, receiving commands and inline button callbacks; natively exposes the structured outcome of each send (sections 3.5, 6.5) |
+| NTP sync + timezone management | Obtaining real timestamps (Unix epoch, UTC) and converting to local time with automatic DST handling |
+| Persistent time anchor (NVS) | Maintaining a usable time reference before NTP sync (section 5.4) |
+| Connectivity and reconnection management | Exponential backoff, detection of the `NETWORK_ISSUE` condition (section 3.4) |
+| Event log (LittleFS, `log.jsonl`) | Persistence of event history (detection only, not notifications) |
+| Per-user notification log (LittleFS) | Tracking of missed/to-be-recovered sends, one file per chat (architecture decided, see section 7) |
+| User and permission management (whitelist) | `chat_id` authorization, standard/admin user distinction, notification recipient filtering |
+| Global configuration management (NVS) | Persistent system settings, modifiable only by admin users |
+| Per-user configuration management (LittleFS) | Individual preferences (date format, timezone, notified event types) |
+| Notification recovery engine | Detection and resending of undelivered notifications, with grace period and scheduled retry |
+| Send rate limiter | Compliance with Telegram API rate limits (section 6.6) |
+| Rotation engine | Periodic cleanup of the event log and the notification log |
+| Filesystem monitoring | Monitoring of LittleFS space and write errors (section 9.4) |
 
-### 3.2 Tipologie di evento
+### 3.2 Event types
 
-Il sistema deve supportare più tipologie di evento, estensibili in futuro. Ogni tipologia è mappata a un valore enum numerico per l'ottimizzazione dello storage (vedi sezione 5.2):
+The system must support multiple event types, extensible in the future. Each type is mapped to a numeric enum value for storage optimization (see section 5.2):
 
-| Valore enum `type` | Tipologia | Natura | Notifica inviata |
+| `type` enum value | Type | Nature | Notification sent |
 |---|---|---|---|
-| `0` | `REBOOT` — riavvio dell'Arduino | Istantaneo (`INSTANT`) | `INSTANT` |
-| `1` | `POWER_LOSS` — interruzione di corrente (mancanza rete 230V) | Con durata (`START`/`END`) | `START` e `END` |
-| `2` | `NETWORK_ISSUE` — problema di connettività di rete | Con durata (`START`/`END`) | **solo `END`** (vedi 3.2.3) |
-| `10` | `ALARM_GENERAL` — allarme generale | Con durata (`START`/`END`) | `START` e `END` |
-| `11` | `ALARM_INTERNAL` — allarme interno | Con durata (`START`/`END`) | `START` e `END` |
-| `12` | `ALARM_GARAGE` — allarme garage | Con durata (`START`/`END`) | `START` e `END` |
+| `0` | `REBOOT` — Arduino reboot | Instant (`INSTANT`) | `INSTANT` |
+| `1` | `POWER_LOSS` — power outage (230V mains missing) | Has duration (`START`/`END`) | `START` and `END` |
+| `2` | `NETWORK_ISSUE` — network connectivity issue | Has duration (`START`/`END`) | **`END` only** (see 3.2.3) |
+| `10` | `ALARM_GENERAL` — general alarm | Has duration (`START`/`END`) | `START` and `END` |
+| `11` | `ALARM_INTERNAL` — internal alarm | Has duration (`START`/`END`) | `START` and `END` |
+| `12` | `ALARM_GARAGE` — garage alarm | Has duration (`START`/`END`) | `START` and `END` |
 
-*(altre tipologie aggiungibili in coda alla enumerazione, senza rompere la compatibilità con i log esistenti — non riutilizzare/rinumerare valori già assegnati)*
+*(other types can be appended to the enumeration, without breaking compatibility with existing logs — never reuse/renumber values already assigned)*
 
-#### 3.2.1 Tabella di configurazione dei tipi
+#### 3.2.1 Type configuration table
 
-Ogni tipo è descritto nel firmware da una voce di una tabella statica unica, che costituisce **l'unico punto di verità** della mappatura:
+Each type is described in the firmware by an entry in a single static table, which is **the single source of truth** for the mapping:
 
-| Campo | Significato |
+| Field | Meaning |
 |---|---|
-| `type` | Valore enum (mai riassegnato) |
-| `label` | Etichetta leggibile per i messaggi Telegram |
-| `pin` | Pin ESP32 associato, oppure "nessuno" per gli eventi generati internamente (`REBOOT`, `NETWORK_ISSUE`) |
-| `active_low` | Polarità del segnale (dipende da open collector / NA / NC) |
-| `enabled` | Se `false`, il tipo è **completamente disattivato**: nessun interrupt registrato, nessuna riga di log, nessuna notifica |
+| `type` | Enum value (never reassigned) |
+| `label` | Human-readable label for Telegram messages |
+| `pin` | Associated ESP32 pin, or "none" for internally-generated events (`REBOOT`, `NETWORK_ISSUE`) |
+| `active_low` | Signal polarity (depends on open collector / NA / NC) |
+| `enabled` | If `false`, the type is **completely disabled**: no interrupt registered, no log row, no notification |
 | `notify_policy` | `START_AND_END`, `ONLY_END`, `INSTANT` |
 
-Il flag `enabled` permette di disattivare a livello di firmware una tipologia non cablata o non desiderata, senza rimuoverne il valore enum (che resta riservato per non invalidare i log storici).
+The `enabled` flag allows a type that isn't wired up or isn't wanted to be disabled at the firmware level, without removing its enum value (which stays reserved so as not to invalidate historical logs).
 
-#### 3.2.2 Nota su `ALARM_GENERAL` e sovrapposizione con le zone
+#### 3.2.2 Note on `ALARM_GENERAL` and overlap with zones
 
-Se sulla centralina la PGM "allarme generale" è configurata come OR delle zone, un allarme in garage attiverà **sia** il pin di `ALARM_GARAGE` **sia** quello di `ALARM_GENERAL`, generando due eventi distinti e due notifiche per lo stesso fatto fisico.
+If the "general alarm" PGM on the panel is configured as an OR of the zones, a garage alarm will trigger **both** the `ALARM_GARAGE` pin **and** the `ALARM_GENERAL` one, generating two distinct events and two notifications for the same physical fact.
 
-**Questo comportamento è accettato per scelta**: `ALARM_GENERAL` viene registrato e notificato ogniqualvolta il suo pin si attiva, senza alcuna logica di soppressione o correlazione temporale con le altre zone (che introdurrebbe casi limite di timing difficili da rendere affidabili). L'eventuale rumore si mitiga a due livelli, entrambi già previsti:
+**This behavior is accepted by choice**: `ALARM_GENERAL` is logged and notified whenever its pin activates, with no suppression logic or temporal correlation with other zones (which would introduce timing edge cases that are hard to make reliable). The resulting noise is mitigated at two levels, both already provided for:
 
-- **Per utente**: `/notify ALARM_GENERAL off` (sezione 11.2) disabilita la notifica per chi non la vuole, lasciando comunque l'evento nello storico.
-- **Globalmente**: `enabled = false` nella tabella di sezione 3.2.1 disattiva del tutto il tipo.
+- **Per user**: `/notify ALARM_GENERAL off` (section 11.2) disables the notification for whoever doesn't want it, while still leaving the event in the history.
+- **Globally**: `enabled = false` in the table in section 3.2.1 disables the type entirely.
 
-#### 3.2.3 Nota su `NETWORK_ISSUE` — perché si notifica solo l'`END`
+#### 3.2.3 Note on `NETWORK_ISSUE` — why only `END` is notified
 
-Lo `START` di un problema di connettività si verifica, per definizione, quando la connettività non c'è: la sua notifica fallirebbe **sistematicamente**, finendo sempre in coda di recupero e venendo poi consegnata al ripristino, a distanza di pochi secondi dalla notifica di `END`. Due messaggi in raffica per un unico fatto già concluso.
+The `START` of a connectivity issue occurs, by definition, when connectivity is absent: its notification would **systematically** fail, always ending up in the recovery queue and then being delivered on restoration, seconds after the `END` notification. Two messages in quick succession for a single already-concluded fact.
 
-Il `notify_policy` di `NETWORK_ISSUE` è quindi `ONLY_END`:
+The `notify_policy` of `NETWORK_ISSUE` is therefore `ONLY_END`:
 
-- La riga `START` **viene comunque scritta** in `log.jsonl` al momento del rilevamento, così lo storico conserva l'istante esatto di inizio del down ed è consultabile con `/log`.
-- Nessuna notifica viene generata (né inviata, né messa in coda di recupero) per quello `START`.
-- Alla riconnessione, la notifica di `END` include la **durata del down** calcolata dai due timestamp, es. *"Connettività ripristinata — assente per 1h 28m (dalle 14:02 alle 15:30)"*.
+- The `START` row **is still written** to `log.jsonl` at the moment of detection, so the history preserves the exact instant the outage began and it's queryable via `/log`.
+- No notification is generated (neither sent, nor queued for recovery) for that `START`.
+- On reconnection, the `END` notification includes the **outage duration** calculated from the two timestamps, e.g. *"Connectivity restored — down for 1h 28m (from 14:02 to 15:30)"*.
 
-Il caso `POWER_LOSS` resta invece `START_AND_END`: se il router non è sotto UPS, lo `START` fallirà e verrà recuperato dal normale meccanismo di sezione 6, comportamento corretto perché la mancanza di corrente è un evento significativo di per sé anche a posteriori.
+The `POWER_LOSS` case, on the other hand, remains `START_AND_END`: if the router isn't on a UPS, the `START` will fail and will be recovered by the normal mechanism in section 6 — correct behavior, because a power loss is a significant event in its own right even after the fact.
 
-### 3.3 Modello di concorrenza: rilevamento vs. rete
+### 3.3 Concurrency model: detection vs. network
 
-**Problema.** Il loop applicativo esegue chiamate HTTPS sincrone verso Telegram (`getUpdates` in long polling, `sendMessage`, handshake TLS). Su ESP32 queste chiamate bloccano il flusso di esecuzione per **secondi**, e fino al timeout configurato in caso di rete degradata. Un debounce implementato con polling nel loop perderebbe qualunque transizione avvenuta durante quelle finestre — cioè, potenzialmente, l'allarme stesso.
+**Problem.** The application loop makes synchronous HTTPS calls to Telegram (`getUpdates` in long polling, `sendMessage`, TLS handshake). On ESP32 these calls block execution for **seconds**, and up to the configured timeout under degraded network conditions. A debounce implemented by polling in the loop would lose any transition that occurred during those windows — potentially, the alarm itself.
 
-**Soluzione adottata: interrupt + coda FreeRTOS + datazione retroattiva.**
+**Solution adopted: interrupt + FreeRTOS queue + retroactive dating.**
 
-1. Su ogni pin abilitato viene registrato un `attachInterrupt()` in modalità `CHANGE`. La ISR è dichiarata `IRAM_ATTR` e fa **una sola cosa**: accodare un record `{indice_pin, livello, millis()}` tramite `xQueueSendFromISR()`. Nessuna allocazione, nessun I/O, nessuna chiamata bloccante nella ISR.
-2. La coda ha profondità fissa (32 elementi, ampiamente sufficiente: 32 transizioni durante un singolo blocco di rete rappresentano già una condizione anomala). In caso di coda piena, l'overflow viene **contato** e segnalato in `/status`, mai ignorato silenziosamente.
-3. Il loop principale, appena torna disponibile, svuota la coda e applica il debounce sui `millis()` registrati **dalla ISR**, non sull'istante di elaborazione: una transizione è confermata se non è seguita da un'altra transizione sullo stesso pin entro 300 ms.
-4. **Datazione retroattiva**: il timestamp dell'evento non è l'istante di elaborazione ma viene ricostruito a ritroso dal `millis()` catturato nella ISR:
+1. An `attachInterrupt()` in `CHANGE` mode is registered on every enabled pin. The ISR is declared `IRAM_ATTR` and does **exactly one thing**: enqueue a record `{pin_index, level, millis()}` via `xQueueSendFromISR()`. No allocation, no I/O, no blocking call inside the ISR.
+2. The queue has a fixed depth (32 elements, amply sufficient: 32 transitions during a single network block already represent an anomalous condition). On queue-full, the overflow is **counted** and reported in `/status`, never silently ignored.
+3. As soon as it becomes free, the main loop drains the queue and applies debounce against the `millis()` values recorded **by the ISR**, not against processing time: a transition is confirmed if it isn't followed by another transition on the same pin within 300 ms.
+4. **Retroactive dating**: the event's timestamp isn't the processing instant but is reconstructed backward from the `millis()` captured in the ISR:
 
    ```
-   ts_evento = epoch_corrente - (millis_ora - millis_ISR) / 1000
+   event_ts = current_epoch - (millis_now - millis_ISR) / 1000
    ```
 
-   In questo modo un allarme scattato mentre il sistema era bloccato in un timeout TLS di 10 secondi risulta datato correttamente, e non 10 secondi dopo.
+   This way, an alarm that fired while the system was blocked in a 10-second TLS timeout is dated correctly, not 10 seconds later.
 
-**Conseguenze e invarianti:**
+**Consequences and invariants:**
 
-- Nessuna transizione viene persa, indipendentemente dalla durata dei blocchi di rete. Un impulso di allarme di durata inferiore al blocco risulta comunque nella coda come coppia di transizioni, e viene ricostruito integralmente (`START` e `END`).
-- **Tutti gli accessi a LittleFS avvengono esclusivamente dal loop principale.** La ISR non tocca il filesystem. Non serve quindi alcun mutex sul FS, che non è thread-safe: questo è un invariante da preservare in ogni estensione futura.
-- Non viene introdotto alcun task FreeRTOS aggiuntivo: la datazione retroattiva rende superfluo un task di rilevamento dedicato, mantenendo il firmware a singolo flusso applicativo e più semplice da ragionare.
-- Il **watchdog hardware** (Task WDT dell'ESP32) è abilitato sul loop applicativo con un timeout superiore al massimo timeout di rete configurato (30 s contro 10 s), così un blocco genuino provoca un riavvio — che a sua volta genera un evento `REBOOT` notificato, rendendo visibile il guasto.
+- No transition is ever lost, regardless of how long network blocks last. An alarm pulse shorter than the block still results in a pair of transitions in the queue, and is fully reconstructed (`START` and `END`).
+- **All LittleFS access happens exclusively from the main loop.** The ISR never touches the filesystem. No mutex is therefore needed on the FS, which isn't thread-safe: this is an invariant to preserve in any future extension.
+- No additional FreeRTOS task is introduced: retroactive dating makes a dedicated detection task unnecessary, keeping the firmware single-flow and easier to reason about.
+- The **hardware watchdog** (ESP32 Task WDT) is enabled on the application loop with a timeout above the maximum configured network timeout (30 s vs. 10 s), so a genuine block triggers a reboot — which in turn generates a notified `REBOOT` event, making the failure visible.
 
-### 3.4 Gestione della connettività e riconnessione
+### 3.4 Connectivity and reconnection management
 
-#### 3.4.1 Definizione operativa di "problema di rete"
+#### 3.4.1 Operational definition of "network issue"
 
-Ai fini di `NETWORK_ISSUE`, ciò che conta non è lo stato del WiFi ma la **raggiungibilità delle API Telegram**: il caso più comune (router acceso, linea ISP giù) presenta un WiFi perfettamente associato e nessuna connettività utile.
+For `NETWORK_ISSUE` purposes, what matters isn't WiFi status but **reachability of the Telegram API**: the most common case (router on, ISP line down) has WiFi perfectly associated and no useful connectivity.
 
-La condizione di problema di rete è quindi definita come:
+The network-issue condition is therefore defined as:
 
-> WiFi disconnesso **oppure** fallimento di tutte le chiamate verso `api.telegram.org` (comprese le `getUpdates` di polling ordinario)
+> WiFi disconnected **or** failure of all calls to `api.telegram.org` (including ordinary polling `getUpdates`)
 
-mantenuta con continuità per più della **soglia configurata** (default: **120 secondi**, `/setnetthreshold`).
+sustained continuously for longer than the **configured threshold** (default: **120 seconds**, `/setnetthreshold`).
 
-- La soglia serve a non generare eventi per micro-interruzioni e per i riavvii del router, che tipicamente rientrano entro i 60-90 secondi. Un valore troppo basso riempirebbe il log di rumore.
-- L'`END` di `NETWORK_ISSUE` viene registrato alla **prima chiamata riuscita** verso l'API, con `ts` pari a quell'istante.
-- Se la connettività rientra **prima** dello scadere della soglia, nessun evento viene registrato: il down è considerato un blip trascurabile.
+- The threshold exists so as not to generate events for micro-interruptions and router reboots, which typically recover within 60-90 seconds. Too low a value would fill the log with noise.
+- The `END` of `NETWORK_ISSUE` is logged on the **first successful call** to the API, with `ts` equal to that instant.
+- If connectivity returns **before** the threshold expires, no event is logged: the outage is considered a negligible blip.
 
-#### 3.4.2 Backoff di riconnessione
+#### 3.4.2 Reconnection backoff
 
-I tentativi di riconnessione seguono un **backoff esponenziale con tetto**, per non saturare il loop né consumare energia in tentativi inutili durante down prolungati:
+Reconnection attempts follow a **capped exponential backoff**, so as not to saturate the loop nor waste energy on useless attempts during prolonged outages:
 
-| Tentativo | Attesa prima del tentativo successivo |
+| Attempt | Wait before next attempt |
 |---|---|
 | 1 | 5 s |
 | 2 | 10 s |
@@ -163,78 +163,78 @@ I tentativi di riconnessione seguono un **backoff esponenziale con tetto**, per 
 | 4 | 40 s |
 | 5 | 80 s |
 | 6 | 160 s |
-| 7 e successivi | 300 s (tetto massimo) |
+| 7 and beyond | 300 s (cap) |
 
-- Il contatore di backoff si **azzera** ad ogni riconnessione riuscita.
-- L'attesa è realizzata con timer non bloccante (confronto su `millis()`), mai con `delay()`: il loop deve restare libero di svuotare la coda degli interrupt e di applicare il debounce (sezione 3.3).
-- Ogni 10 tentativi consecutivi falliti viene tentato un ciclo completo `WiFi.disconnect()` + `WiFi.begin()`, per recuperare gli stati anomali dello stack WiFi che una semplice `reconnect()` non risolve.
-- Il tetto di 300 s garantisce che, a rete ripristinata, il ritardo massimo di rilevamento sia di 5 minuti; la sincronizzazione NTP e la scansione di recupero notifiche (sezione 6.2) seguono immediatamente il rientro.
+- The backoff counter **resets** on every successful reconnection.
+- The wait is implemented with a non-blocking timer (`millis()` comparison), never with `delay()`: the loop must remain free to drain the interrupt queue and apply debounce (section 3.3).
+- Every 10 consecutive failed attempts, a full `WiFi.disconnect()` + `WiFi.begin()` cycle is attempted, to recover from anomalous WiFi stack states that a plain `reconnect()` doesn't resolve.
+- The 300 s cap guarantees that, once the network is restored, the maximum detection delay is 5 minutes; NTP sync and the notification recovery scan (section 6.2) immediately follow the return of connectivity.
 
-### 3.5 Libreria client Telegram (FastBot2)
+### 3.5 Telegram client library (FastBot2)
 
-**Libreria scelta: FastBot2** (GyverLibs), al posto di UniversalTelegramBot valutata in una prima stesura del documento. Il motivo della scelta è specifico al punto 6.5: `sendMessage()` **ritorna direttamente un oggetto `fb::Result`**, non un semplice `bool`, con accesso diretto ai campi della risposta Telegram (`isError()`, `getErrorCode()`, `getError()`, e il parser interno per `parameters.retry_after`) — la classificazione degli esiti di invio richiesta da 6.5 è quindi ottenibile con l'API pubblica della libreria, senza wrapper né modifiche locali.
+**Library chosen: FastBot2** (GyverLibs), instead of UniversalTelegramBot evaluated in an early draft of this document. The reason for the choice is specific to point 6.5: `sendMessage()` **returns an `fb::Result` object directly**, not a plain `bool`, with direct access to the fields of the Telegram response (`isError()`, `getErrorCode()`, `getError()`, and the internal parser for `parameters.retry_after`) — the send-outcome classification required by 6.5 is therefore obtainable with the library's public API, with no wrapper or local modification.
 
-#### 3.5.1 Modalità di polling
+#### 3.5.1 Polling mode
 
-FastBot2 offre tre modalità (`bot.setPollMode(...)`), selezionabili con un trade-off diretto tra reattività e blocco del loop:
+FastBot2 offers three modes (`bot.setPollMode(...)`), selectable with a direct trade-off between responsiveness and loop blocking:
 
-| Modalità | Comportamento |
+| Mode | Behavior |
 |---|---|
-| `Sync` (default) | `tick()` attende la risposta al proprio interno; con rete degradata può bloccare fino al timeout configurato |
-| `Async` | `tick()` non attende la risposta di polling, ma un invio richiesto **mentre è in corso un polling** forza una riconnessione bloccante di ~1 s |
-| `Long` | Long polling asincrono (timeout consigliato ≥ 20 s); gli aggiornamenti arrivano non appena disponibili. Un invio richiesto durante il polling ha lo stesso costo di riconnessione di `Async` |
+| `Sync` (default) | `tick()` waits for the response internally; under degraded network conditions it can block up to the configured timeout |
+| `Async` | `tick()` doesn't wait for the polling response, but a send requested **while a poll is in progress** forces a blocking reconnection of ~1 s |
+| `Long` | Asynchronous long polling (recommended timeout ≥ 20 s); updates arrive as soon as they're available. A send requested during polling has the same reconnection cost as `Async` |
 
-**Modalità adottata: `Long`**, con timeout 60 s, per la consegna più rapida dei comandi in arrivo. La libreria espone `isPolling()` per sapere se un ciclo di long-poll è in corso; l'invio da fuori dal gestore di aggiornamento (`onUpdate`) — che è esattamente il caso delle notifiche generate dagli eventi rilevati sui pin, asincrone rispetto al ciclo Telegram — **può quindi incorrere nel blocco di ~1 s per la riconnessione**, indipendentemente dalla modalità scelta.
+**Mode adopted: `Long`**, with a 60 s timeout, for the fastest delivery of incoming commands. The library exposes `isPolling()` to know whether a long-poll cycle is in progress; a send issued from outside the update handler (`onUpdate`) — which is exactly the case of notifications generated by events detected on pins, asynchronous with respect to the Telegram cycle — **can therefore incur the ~1 s reconnection block**, regardless of the mode chosen.
 
-Questo non introduce un requisito nuovo: è esattamente il tipo di blocco di rete già assunto come possibile in sezione 3.3, coperto dall'architettura ISR + coda + datazione retroattiva. Nessuna transizione sui pin viene persa per effetto di questo blocco, e il watchdog (30 s) resta ampiamente al di sopra del caso peggiore (~1 s).
+This doesn't introduce a new requirement: it's exactly the kind of network block already assumed possible in section 3.3, covered by the ISR + queue + retroactive-dating architecture. No pin transition is lost as a result of this block, and the watchdog (30 s) stays amply above the worst case (~1 s).
 
-#### 3.5.2 Convivenza con ArduinoJson
+#### 3.5.2 Coexistence with ArduinoJson
 
-FastBot2 usa internamente **GSON** (dello stesso autore) per il parsing delle risposte dell'API Telegram — una dipendenza propria della libreria, non una scelta del progetto. **ArduinoJson resta la libreria usata per tutti i file del progetto** (`users.json`, `userconfig.json`, righe di `log.jsonl` e di `notif_<chat_id>.jsonl`, sezioni 4.4, 5.2, 7.2): è una decisione esplicita, non un'omissione. Le due librerie sono indipendenti e non condividono buffer né tipi, quindi la coesistenza non comporta rischi; il costo è unicamente qualche KB aggiuntivo di flash per avere due parser JSON nel firmware, ritenuto accettabile rispetto al beneficio di non dover riscrivere la logica di lettura/scrittura dei file già specificata nel documento.
+FastBot2 internally uses **GSON** (by the same author) to parse Telegram API responses — a dependency of the library itself, not a project choice. **ArduinoJson remains the library used for every file in the project** (`users.json`, `userconfig.json`, `log.jsonl` and `notif_<chat_id>.jsonl` rows, sections 4.4, 5.2, 7.2): this is an explicit decision, not an oversight. The two libraries are independent and share no buffers or types, so coexistence carries no risk; the cost is only a few extra KB of flash for having two JSON parsers in the firmware, deemed acceptable against the benefit of not having to rewrite the file read/write logic already specified in this document.
 
-**Nota sui `chat_id`**: FastBot2 rappresenta gli identificativi (`fb::ID`) internamente come stringa (buffer di 22 caratteri), costruibile esplicitamente da un intero a 64 bit (`long long`). Passare il `chat_id` come `int64_t` nativo (mai tramite un tipo a 32 bit intermedio) evita quindi qualunque troncamento anche sul lato Telegram della catena; il requisito `int64_t` di sezione 4.2 resta comunque necessario per la parte del sistema scritta con ArduinoJson (whitelist, configurazioni), dove il rischio di troncamento è reale.
+**Note on `chat_id`**: FastBot2 represents identifiers (`fb::ID`) internally as a string (22-character buffer), explicitly constructible from a 64-bit integer (`long long`). Passing `chat_id` as a native `int64_t` (never through an intermediate 32-bit type) therefore avoids any truncation even on the Telegram side of the chain; the `int64_t` requirement from section 4.2 remains necessary regardless for the part of the system written with ArduinoJson (whitelist, configurations), where the truncation risk is real.
 
 ---
 
-## 4. Gestione utenti, permessi e sicurezza
+## 4. User, permission, and security management
 
-### 4.1 Motivazione
+### 4.1 Motivation
 
-Telegram non fornisce un meccanismo nativo di controllo accessi per i bot: chiunque conosca lo username del bot può scrivergli. La protezione è quindi interamente gestita lato applicazione, tramite una whitelist di `chat_id` autorizzati.
+Telegram provides no native access-control mechanism for bots: anyone who knows the bot's username can message it. Protection is therefore entirely handled at the application level, via a whitelist of authorized `chat_id`s.
 
 ### 4.2 Whitelist
 
-Ogni messaggio in arrivo (comando) viene verificato contro la whitelist prima di essere processato:
+Every incoming message (command) is checked against the whitelist before being processed:
 
-- Se il `chat_id` mittente **non è in whitelist**, il messaggio viene **ignorato silenziosamente** (nessuna risposta), per non rivelare l'esistenza/funzionamento del bot a chi indovina lo username.
-- Se il `chat_id` **è in whitelist**, il comando viene eseguito secondo i permessi associati.
+- If the sender's `chat_id` **is not on the whitelist**, the message is **silently ignored** (no response), so as not to reveal the bot's existence/operation to whoever guesses the username.
+- If the `chat_id` **is on the whitelist**, the command is executed according to the associated permissions.
 
-La stessa verifica si applica alle **callback query** generate dai bottoni inline (sezione 8): l'autorizzazione viene rivalutata al momento del click, mai data per acquisita dal fatto che il bottone sia visibile.
+The same check applies to **callback queries** generated by inline buttons (section 8): authorization is re-evaluated at the moment of the click, never taken for granted just because the button is visible.
 
-La stessa whitelist regola anche l'**invio delle notifiche**: quando un evento genera una notifica, questa viene inviata esclusivamente ai `chat_id` presenti in whitelist, mai a destinatari non autorizzati.
+The same whitelist also governs **notification sending**: when an event generates a notification, it's sent exclusively to `chat_id`s present on the whitelist, never to unauthorized recipients.
 
-**Nota implementativa sui `chat_id`**: i `chat_id` di Telegram sono interi **con segno a 64 bit**. Le chat private hanno valori positivi che oggi rientrano nei 32 bit, ma gruppi e supergruppi usano valori **negativi** che li superano ampiamente (formato `-100XXXXXXXXXX`). Vanno quindi rappresentati con `int64_t` in ogni punto del sistema — struct in RAM, parsing JSON (ArduinoJson va istruito esplicitamente sul tipo a 64 bit), confronti e formattazione. Un `long` su ESP32 è a 32 bit e produrrebbe un troncamento **silenzioso**, con il risultato che un gruppo autorizzato non verrebbe mai riconosciuto.
+**Implementation note on `chat_id`s**: Telegram `chat_id`s are **signed 64-bit** integers. Private chats have positive values that today fit within 32 bits, but groups and supergroups use **negative** values that far exceed them (format `-100XXXXXXXXXX`). They must therefore be represented as `int64_t` at every point in the system — RAM structs, JSON parsing (ArduinoJson must be explicitly instructed on the 64-bit type), comparisons, and formatting. A `long` on ESP32 is 32 bits and would produce **silent** truncation, with the result that an authorized group would never be recognized.
 
-Quando un `chat_id` viene usato per comporre un nome file (sezione 7), il segno meno va sostituito da un prefisso testuale (es. `notif_g1001234567890.jsonl`) per evitare nomi che iniziano con caratteri problematici.
+When a `chat_id` is used to build a filename (section 7), the minus sign must be replaced with a text prefix (e.g. `notif_g1001234567890.jsonl`) to avoid filenames starting with problematic characters.
 
-### 4.3 Livelli di permesso
+### 4.3 Permission levels
 
-Per la fase attuale è previsto un unico flag booleano `admin`, senza permessi granulari:
+For the current phase, a single boolean `admin` flag is provided, with no granular permissions:
 
-- **Utente standard**: può consultare il registro (`/log`), verificare lo stato del sistema (`/status`), vedere e modificare le **proprie** preferenze personali (formato data, timezone, tipi di evento notificati).
-- **Utente admin**: oltre a quanto sopra, può modificare le **configurazioni globali** di sistema (retention, grace period, retry interval, max retry, soglia di rete), **chiudere manualmente eventi aperti** (via bottone inline o `/closeevent`) e **gestire la whitelist stessa** (vedi 4.5).
+- **Standard user**: can view the history (`/log`), check system status (`/status`), view and modify **their own** personal preferences (date format, timezone, notified event types).
+- **Admin user**: in addition to the above, can modify **global** system configurations (retention, grace period, retry interval, max retries, network threshold), **manually close open events** (via inline button or `/closeevent`), and **manage the whitelist itself** (see 4.5).
 
-Questa distinzione binaria è considerata sufficiente per un uso personale/familiare; lo schema di storage scelto è comunque predisposto per l'aggiunta futura di permessi più granulari senza richiedere una ristrutturazione.
+This binary distinction is considered sufficient for personal/family use; the storage schema chosen is nonetheless prepared for the future addition of more granular permissions without requiring restructuring.
 
-### 4.4 Storage di utenti e configurazioni
+### 4.4 User and configuration storage
 
-| File/Storage | Contenuto | Formato |
+| File/Storage | Content | Format |
 |---|---|---|
-| `users.json` (LittleFS) | Whitelist dei `chat_id` autorizzati, con flag `admin` e data di aggiunta per ciascuno | JSON, riscritto per intero (write-then-rename) ad ogni modifica |
-| `userconfig.json` (LittleFS) | Preferenze per singolo utente: formato data, timezone, tipi di evento notificati | JSON indicizzato per `chat_id`, riscritto per intero ad ogni modifica |
-| NVS (Preferences) | Configurazioni **globali** di sistema, versione di schema, ancora oraria, timestamp ultima rotazione | Coppie chiave-valore scalari |
+| `users.json` (LittleFS) | Whitelist of authorized `chat_id`s, with an `admin` flag and an added-date for each | JSON, rewritten in full (write-then-rename) on every change |
+| `userconfig.json` (LittleFS) | Per-user preferences: date format, timezone, notified event types | JSON indexed by `chat_id`, rewritten in full on every change |
+| NVS (Preferences) | **Global** system configurations, schema version, time anchor, last-rotation timestamp | Scalar key-value pairs |
 
-Esempio indicativo di `users.json`:
+Illustrative example of `users.json`:
 ```json
 {
   "authorized": [
@@ -244,616 +244,616 @@ Esempio indicativo di `users.json`:
 }
 ```
 
-### 4.5 Popolamento iniziale e gestione operativa della whitelist
+### 4.5 Initial population and operational whitelist management
 
-- **Onboarding iniziale**: un `chat_id` iniziale viene **definito nel file dei segreti** (sezione 4.7) in fase di setup, e diventa automaticamente il primo utente admin al primo avvio (popolando `users.json` se ancora vuoto/assente).
-- **Comandi di gestione whitelist** (riservati agli admin):
-  - Aggiunta di un nuovo utente autorizzato
-  - Rimozione di un utente
-  - Promozione/rimozione del flag admin per un utente esistente
-  - Reset completo della whitelist (da usare con cautela — da valutare se richiedere una conferma esplicita data la natura distruttiva)
+- **Initial onboarding**: an initial `chat_id` is **defined in the secrets file** (section 4.7) at setup time, and automatically becomes the first admin user on first boot (populating `users.json` if still empty/absent).
+- **Whitelist management commands** (admin-only):
+  - Adding a new authorized user
+  - Removing a user
+  - Promoting/revoking the admin flag for an existing user
+  - Fully resetting the whitelist (use with caution — worth requiring explicit confirmation given the destructive nature)
 
-*(Sintassi esatta dei comandi in sezione 12.)*
+*(Exact command syntax in section 12.)*
 
-### 4.6 Filtro degli eventi precedenti all'aggiunta di un utente
+### 4.6 Filtering events prior to a user's addition
 
-Per evitare che un nuovo utente, appena aggiunto alla whitelist, riceva un invio massivo di tutte le notifiche storiche pregresse, si usa il campo `added_ts` già presente in `users.json` come filtro: qualunque evento con timestamp di origine antecedente ad `added_ts` viene **escluso** dall'invio delle notifiche per quell'utente, sia nel flusso normale sia in fase di recupero. Il `/log` storico resta comunque interamente consultabile da chiunque sia autorizzato, indipendentemente da questa data.
+To avoid a newly-added user receiving a mass send of all past historical notifications, the `added_ts` field already present in `users.json` is used as a filter: any event with an origin timestamp earlier than `added_ts` is **excluded** from notification sending for that user, both in the live flow and during recovery. Historical `/log` remains fully browsable by anyone authorized, regardless of this date.
 
-### 4.7 Gestione dei segreti
+### 4.7 Secrets management
 
-Il token del bot Telegram, le credenziali WiFi e il `chat_id` di onboarding risiedono in un file **`secrets.h`** separato, incluso dallo sketch principale.
+The Telegram bot token, WiFi credentials, and the onboarding `chat_id` live in a separate **`secrets.h`** file, included by the main sketch.
 
-- Con Arduino IDE il file compare come **tab aggiuntivo** dello sketch se collocato nella stessa cartella, quindi resta comodamente modificabile senza toccare il sorgente principale.
-- `secrets.h` è **escluso dal versionamento** (`.gitignore`). Nel repository viene versionato un `secrets.h.example` con la stessa struttura e valori segnaposto, così la compilazione su una macchina pulita fallisce con un errore chiaro invece che con un comportamento anomalo a runtime.
-- I valori sono memorizzati **in chiaro** nel firmware. Questa è una scelta consapevole: la flash encryption dell'ESP32-S3 non viene utilizzata.
+- With the Arduino IDE, the file appears as an **additional tab** of the sketch when placed in the same folder, so it stays conveniently editable without touching the main source.
+- `secrets.h` is **excluded from version control** (`.gitignore`). A `secrets.h.example` with the same structure and placeholder values is committed to the repository, so a build on a clean machine fails with a clear error instead of anomalous runtime behavior.
+- Values are stored **in plaintext** in the firmware. This is a conscious choice: ESP32-S3 flash encryption is not used.
 
-  **Modello di minaccia da tenere presente**: il dispositivo è installato *dentro* la centralina d'allarme. Chi ottiene accesso fisico al suo interno può dumpare la flash e recuperare il token del bot, potendo poi inviare messaggi arbitrari agli utenti (non però leggere lo storico né comandare la centralina). Il rischio è considerato accettabile dato che chi ha già aperto la centralina ha problemi più immediati da causare; se il token viene compromesso, la mitigazione è rigenerarlo da BotFather e riprogrammare il dispositivo.
+  **Threat model to keep in mind**: the device is installed *inside* the alarm control panel. Whoever gains physical access to its interior can dump the flash and recover the bot token, then being able to send arbitrary messages to users (though not read the history nor command the panel). The risk is considered acceptable given that whoever has already opened the panel has more immediate problems to cause; if the token is compromised, the mitigation is regenerating it via BotFather and reflashing the device.
 
 ---
 
-## 5. Modello dati del registro eventi
+## 5. Event log data model
 
-### 5.1 Formato di storage
+### 5.1 Storage format
 
-Il registro eventi è salvato in formato **JSON Lines** (`log.jsonl`) su **LittleFS**, con approccio **append-only**: nessuna riga esistente viene mai modificata. Questo file contiene **esclusivamente il rilevamento degli eventi** (non lo stato delle notifiche, che vive nel registro separato di sezione 7). Il registro resta **unico e condiviso** tra tutti gli utenti autorizzati.
+The event log is saved in **JSON Lines** format (`log.jsonl`) on **LittleFS**, with an **append-only** approach: no existing row is ever modified. This file contains **only event detection** (not notification state, which lives in the separate log described in section 7). The log remains **single and shared** across all authorized users.
 
-### 5.2 Schema del record
+### 5.2 Record schema
 
 ```json
-{"id": "<uuid v4 esadecimale, 32 caratteri>", "type": <enum, vedi 3.2>, "status": <enum, vedi sotto>, "ts": <epoch Unix, UTC>, "a": 1}
+{"id": "<hex UUID v4, 32 characters>", "type": <enum, see 3.2>, "status": <enum, see below>, "ts": <Unix epoch, UTC>, "a": 1}
 ```
 
-- **`id`**: UUID v4 generato tramite generatore hardware casuale dell'ESP32 (`esp_random()`), rappresentato in **esadecimale senza trattini (32 caratteri)** invece del formato testuale standard con trattini (36 caratteri) — risparmio di 4 caratteri per occorrenza, oltre a semplificare il parsing. Non richiede persistenza di un contatore in NVS. Le righe `START`/`END` di uno stesso evento con durata condividono lo stesso `id`. L'`id` non viene mai digitato manualmente dagli utenti nel flusso ordinario (vedi sezione 8: la chiusura degli eventi avviene tramite bottoni inline).
-- **`type`**: valore enum numerico secondo la tabella in sezione 3.2, invece della stringa testuale (es. `0` invece di `"ALARM_GENERAL"`).
-- **`status`**: valore enum numerico:
+- **`id`**: a v4 UUID generated via the ESP32's hardware random generator (`esp_random()`), represented in **hexadecimal without dashes (32 characters)** instead of the standard dashed text format (36 characters) — a saving of 4 characters per occurrence, besides simplifying parsing. Requires no counter persisted in NVS. The `START`/`END` rows of the same duration event share the same `id`: `START` creates the ID, while `END` resolves and reuses the currently open ID for that event type, including after a reboot by inspecting `log.jsonl`. An `END` without an open matching `START`, or a duplicate `START` while the type is already open, is ignored. The `id` is never manually typed by users in the ordinary flow (see section 8: closing events happens via inline buttons).
+- **`type`**: numeric enum value per the table in section 3.2, instead of a text string (e.g. `0` instead of `"ALARM_GENERAL"`).
+- **`status`**: numeric enum value:
 
-  | Valore | Significato |
+  | Value | Meaning |
   |---|---|
   | `0` | `START` |
   | `1` | `END` |
   | `2` | `INSTANT` |
 
-- **`ts`**: epoch Unix (UTC) del momento del rilevamento, scritto immediatamente e datato retroattivamente secondo la sezione 3.3.
-- **`a`** (*approximate*): flag di qualità del timestamp, vedi sezione 5.4. **Presente solo se vale `1`**; nel caso normale (orario sincronizzato via NTP) il campo è **omesso**, quindi non ha alcun costo di storage nella stragrande maggioranza delle righe.
+- **`ts`**: Unix epoch (UTC) of the detection instant, written immediately and retroactively dated per section 3.3.
+- **`a`** (*approximate*): timestamp-quality flag, see section 5.4. **Present only if `1`**; in the normal case (time synced via NTP) the field is **omitted**, so it costs nothing in storage for the vast majority of rows.
 
-Esempio concreto:
+Concrete example:
 ```json
 {"id":"a1b2c3d4e5f60718293a4b5c6d7e8f90","type":0,"status":0,"ts":1755500000}
 ```
 
-**Nota sulla manutenibilità**: la mappatura enum → significato (tabella di sezione 3.2.1) deve essere mantenuta in un unico punto nel codice (header condiviso) e mai riassegnata per valori già in uso, per non invalidare il significato delle righe già scritte nei log esistenti.
+**Note on maintainability**: the enum → meaning mapping (table in section 3.2.1) must be kept in a single place in the code (shared header) and never reassigned for values already in use, so as not to invalidate the meaning of rows already written to existing logs.
 
-### 5.3 Formattazione dei timestamp
+### 5.3 Timestamp formatting
 
-I timestamp sono **sempre memorizzati in epoch Unix**. La conversione in formato leggibile e nel fuso orario corretto avviene esclusivamente al momento della visualizzazione (comando `/log`) o dell'invio della notifica, secondo le preferenze **del singolo utente destinatario** (formato data e timezone).
+Timestamps are **always stored as Unix epoch**. Conversion to a human-readable format and to the correct timezone happens exclusively at display time (`/log` command) or when sending a notification, according to the preferences **of the individual recipient user** (date format and timezone).
 
-### 5.4 Affidabilità e monotonicità dei timestamp
+### 5.4 Timestamp reliability and monotonicity
 
-L'ESP32 non dispone di RTC tamponato: l'orario reale arriva unicamente da NTP, che richiede connettività. Poiché lo scenario di guasto più probabile è proprio l'assenza di rete (sezione 1), è necessario garantire un timestamp sensato **anche prima della prima sincronizzazione NTP** — altrimenti un riavvio durante un down di rete produrrebbe eventi datati 1970, con effetti a cascata su grace period, rotazione e ordinamento.
+The ESP32 has no battery-backed RTC: real time comes only from NTP, which requires connectivity. Since the most probable failure scenario is precisely the absence of network (section 1), a sensible timestamp must be guaranteed **even before the first NTP sync** — otherwise a reboot during a network outage would produce events dated 1970, with cascading effects on grace period, rotation, and ordering.
 
-#### 5.4.1 Ancora oraria persistente (NVS)
+#### 5.4.1 Persistent time anchor (NVS)
 
-- Mentre l'orario è valido (NTP sincronizzato), il sistema salva l'epoch corrente in NVS (chiave `last_epoch`) **ogni 10 minuti**, oltre che immediatamente dopo ogni sincronizzazione NTP riuscita.
-- Al boot, prima che NTP sia disponibile, l'orario di lavoro è ricostruito come:
+- While time is valid (NTP synced), the system saves the current epoch to NVS (`last_epoch` key) **every 10 minutes**, as well as immediately after every successful NTP sync.
+- At boot, before NTP is available, the working time is reconstructed as:
 
   ```
-  ts_stimato = last_epoch + millis() / 1000
+  estimated_ts = last_epoch + millis() / 1000
   ```
 
-- Ogni riga scritta con un orario così ricostruito porta il flag **`"a": 1`**. Alla prima sincronizzazione NTP riuscita il flag smette di essere applicato alle righe successive; **le righe già scritte non vengono corrette a posteriori**, coerentemente con la natura append-only del log.
-- **Usura NVS**: 144 scritture al giorno di un singolo valore a 64 bit. Il wear-leveling della partizione NVS aggrega centinaia di scritture per pagina prima di richiedere una cancellazione, portando l'usura effettiva a poche centinaia di cicli di erase all'anno — del tutto trascurabile rispetto alla vita utile della flash.
+- Every row written with a time reconstructed this way carries the **`"a": 1`** flag. On the first successful NTP sync, the flag stops being applied to subsequent rows; **rows already written are not corrected retroactively**, consistent with the append-only nature of the log.
+- **NVS wear**: 144 writes per day of a single 64-bit value. NVS partition wear-leveling aggregates hundreds of writes per page before requiring an erase, bringing effective wear down to a few hundred erase cycles per year — entirely negligible against the useful life of the flash.
 
-#### 5.4.2 Conseguenze del flag `a` sul comportamento
+#### 5.4.2 Consequences of the `a` flag on behavior
 
-| Ambito | Trattamento di una riga con `a: 1` |
+| Area | Treatment of a row with `a: 1` |
 |---|---|
-| Notifica | Il timestamp è mostrato preceduto da `~` (es. `~14:02`) e la notifica riporta sempre il prefisso di recupero, **indipendentemente dal grace period**: non essendo affidabile lo scarto temporale, non ha senso decidere in base ad esso (vedi 6.4) |
-| `/log` | Stessa marcatura `~` nel rendering |
-| Rotazione | Trattata come una riga normale: l'ancora garantisce comunque un valore plausibile, non un 1970 che ne provocherebbe la cancellazione immediata |
+| Notification | The timestamp is shown prefixed with `~` (e.g. `~14:02`) and the notification always carries the recovery prefix, **regardless of the grace period**: since the time gap isn't reliable, it makes no sense to decide based on it (see 6.4) |
+| `/log` | Same `~` marking in the rendering |
+| Rotation | Treated as a normal row: the anchor still guarantees a plausible value, not a 1970 that would trigger its immediate deletion |
 
-#### 5.4.3 Monotonicità garantita
+#### 5.4.3 Guaranteed monotonicity
 
-Una correzione NTP all'indietro (o una stima dell'ancora superiore all'orario reale) potrebbe produrre timestamp non crescenti in un file append-only, rompendo l'ordinamento di `/log`, i calcoli di età in rotazione e la ricostruzione delle durate.
+A backward NTP correction (or an anchor estimate above the real time) could produce non-increasing timestamps in an append-only file, breaking `/log` ordering, rotation age calculations, and duration reconstruction.
 
-Il sistema mantiene quindi in RAM `last_written_ts`, **inizializzato al boot leggendo l'ultima riga di `log.jsonl`** (lettura all'indietro dalla fine del file, senza scansione completa), e applica un clamp prima di ogni scrittura:
+The system therefore keeps `last_written_ts` in RAM, **initialized at boot by reading the last line of `log.jsonl`** (reading backward from the end of the file, without a full scan), and applies a clamp before every write:
 
 ```
-ts_scritto = max(ts_calcolato, last_written_ts)
+written_ts = max(calculated_ts, last_written_ts)
 ```
 
-Se il clamp è intervenuto, la riga viene marcata con `a: 1`, perché il valore scritto non corrisponde più all'istante reale del rilevamento.
+If the clamp fired, the row is marked with `a: 1`, because the value written no longer corresponds to the real instant of detection.
 
-### 5.5 Versione di schema
+### 5.5 Schema version
 
-La versione del formato dei dati su disco è memorizzata in NVS come intero (chiave `schema_ver`, valore iniziale `1`), e verificata ad ogni boot contro la costante compilata nel firmware:
+The on-disk data format version is stored in NVS as an integer (`schema_ver` key, initial value `1`), and checked at every boot against the constant compiled into the firmware:
 
-- **Coincidenza**: avvio normale.
-- **Versione su disco più vecchia**: viene eseguita la migrazione prevista per quel salto di versione; il valore in NVS viene aggiornato **solo dopo** che la migrazione è andata a buon fine.
-- **Versione su disco più recente del firmware** (downgrade accidentale): il sistema **non tocca i file esistenti**, entra in modalità degradata e notifica gli admin. Un firmware vecchio che riscrive dati in un formato che non comprende è il modo più rapido per perdere lo storico.
+- **Match**: normal startup.
+- **On-disk version older**: the migration foreseen for that version jump is executed; the NVS value is updated **only after** the migration succeeds.
+- **On-disk version newer than the firmware** (accidental downgrade): the system **does not touch existing files**, enters degraded mode, and notifies admins. An old firmware rewriting data in a format it doesn't understand is the fastest way to lose the history.
 
-La versione va incrementata ogni volta che cambia la struttura di `log.jsonl`, dei file di notifica, o il significato di un campo esistente. **Non** va incrementata per la semplice aggiunta di un nuovo valore enum in coda (operazione retrocompatibile per costruzione).
+The version must be incremented every time the structure of `log.jsonl`, of the notification files, or the meaning of an existing field changes. It must **not** be incremented for the simple addition of a new enum value at the end (an operation backward-compatible by construction).
 
 ---
 
-## 6. Logica di notifica, recupero e grace period
+## 6. Notification, recovery, and grace period logic
 
-### 6.1 Flusso normale
+### 6.1 Normal flow
 
-1. Un evento viene rilevato (transizione confermata su un pin secondo la sezione 3.3, oppure generato internamente: riavvio, problema di rete) e scritto immediatamente in `log.jsonl` (sezione 5).
-2. Se il `notify_policy` del tipo prevede una notifica per quel `status` (sezione 3.2.1), si tenta l'invio Telegram a tutti i `chat_id` in whitelist per cui quel tipo di evento è abilitato nelle rispettive preferenze personali (e il cui `added_ts` precede l'evento, vedi 4.6).
-3. L'esito dell'invio per ciascun destinatario viene classificato secondo la sezione 6.5 e tracciato secondo l'architettura di sezione 7 (Proposta E).
+1. An event is detected (a confirmed transition on a pin per section 3.3, or internally generated: reboot, network issue) and immediately written to `log.jsonl` (section 5).
+2. If the type's `notify_policy` calls for a notification for that `status` (section 3.2.1), a Telegram send is attempted to every whitelisted `chat_id` for whom that event type is enabled in their personal preferences (and whose `added_ts` precedes the event, see 4.6).
+3. The outcome of the send for each recipient is classified per section 6.5 and tracked per the architecture in section 7 (Proposal E).
 
-**Semantica della "consegna"**: il sistema traccia esclusivamente se il messaggio è stato **accettato dalle API di Telegram**, non se l'utente lo abbia ricevuto o letto. È la garanzia corretta da inseguire: una volta che Telegram ha risposto `ok: true`, la consegna al dispositivo dell'utente è responsabilità di Telegram, che la effettua anche se il destinatario è offline in quel momento. Non esiste (né serve) alcun meccanismo di conferma di lettura.
+**Semantics of "delivery"**: the system tracks exclusively whether the message was **accepted by the Telegram API**, not whether the user received or read it. This is the correct guarantee to pursue: once Telegram has replied `ok: true`, delivery to the user's device is Telegram's responsibility, which it carries out even if the recipient is offline at that moment. There is no (nor is there a need for) any read-receipt mechanism.
 
-### 6.2 Scansione di recupero
+### 6.2 Recovery scan
 
-Il registro notifiche **non viene mai scansionato continuamente**. La scansione di recupero viene eseguita esclusivamente in tre occasioni:
+The notification log is **never scanned continuously**. The recovery scan runs exclusively on three occasions:
 
-- **Al boot** dell'Arduino (sempre, una tantum).
-- **Al ripristino della connettività** dopo un evento `NETWORK_ISSUE` (sezione 3.4).
-- **Allo scadere del timer di retry programmato** (vedi 6.3).
+- **On boot** of the Arduino (always, one-time).
+- **On connectivity restoration** after a `NETWORK_ISSUE` event (section 3.4).
+- **On expiry of the scheduled retry timer** (see 6.3).
 
-### 6.3 Retry programmato
+### 6.3 Scheduled retry
 
-Ogni fallimento **transitorio** di invio (sia di una notifica "nuova" sia di una notifica in fase di recupero — vedi la classificazione in 6.5) è gestito tramite un **timer non bloccante** (basato su confronto di `millis()`/tempo corrente, senza polling del file), con durata **configurabile in minuti (default: 60)**:
+Every **transient** send failure (whether of a "new" notification or one already in recovery — see the classification in 6.5) is handled via a **non-blocking timer** (based on comparing `millis()`/current time, without polling the file), with a duration **configurable in minutes (default: 60)**:
 
-- Se un invio **fallisce** e il timer non è già attivo, viene **avviato** con la durata configurata.
-- Se un invio **fallisce** mentre il timer è già attivo (in attesa), il timer viene **resettato** al valore pieno configurato.
-- Se un invio **ha successo** (di qualunque notifica) mentre il timer è attivo, il timer **non viene semplicemente cancellato**: scatta immediatamente una scansione di recupero anticipata (6.2). L'esito di questa scansione determina lo stato finale del timer, secondo la stessa regola valida allo scadere naturale (punto successivo).
-- Allo **scadere** del timer (naturale o anticipato), viene eseguita una scansione di recupero: se tutti gli invii pendenti hanno successo (o vengono marcati `ABANDONED`), il timer viene **cancellato**; se anche solo uno fallisce in modo transitorio, il timer viene **riavviato** con la durata configurata.
+- If a send **fails** and the timer isn't already active, it's **started** with the configured duration.
+- If a send **fails** while the timer is already active (pending), the timer is **reset** to the full configured value.
+- If a send **succeeds** (for any notification) while the timer is active, the timer **is not simply canceled**: an early recovery scan (6.2) fires immediately. The outcome of this scan determines the timer's final state, per the same rule that applies on natural expiry (next point).
+- On timer **expiry** (natural or early), a recovery scan is run: if every pending send succeeds (or is marked `ABANDONED`), the timer is **canceled**; if even one fails transiently, the timer is **restarted** with the configured duration.
 
-#### 6.3.1 Protezione contro la rientranza (`scan_in_progress`)
+#### 6.3.1 Reentrancy protection (`scan_in_progress`)
 
-La regola "un successo scatena una scansione anticipata" si riferisce esclusivamente ai successi ottenuti nel **flusso normale** (6.1), mai a quelli ottenuti **all'interno** di una scansione di recupero — che altrimenti innescherebbero ricorsivamente una nuova scansione al primo invio riuscito.
+The rule "a success triggers an early scan" refers exclusively to successes obtained in the **normal flow** (6.1), never to those obtained **inside** a recovery scan — which would otherwise recursively trigger a new scan on the first successful send.
 
-Il sistema mantiene quindi un flag booleano **`scan_in_progress`**, impostato all'inizio della scansione di recupero e azzerato alla sua conclusione (anche in caso di uscita anticipata per errore). Mentre il flag è attivo:
+The system therefore keeps a boolean **`scan_in_progress`** flag, set at the start of the recovery scan and cleared at its conclusion (even on early exit due to error). While the flag is active:
 
-- Nessun successo può innescare una scansione anticipata.
-- Nessuna nuova scansione può essere avviata: una richiesta di scansione ricevuta in questa finestra viene semplicemente scartata (la scansione in corso la coprirà comunque, dato che rilegge lo stato completo dei pendenti).
+- No success can trigger an early scan.
+- No new scan can be started: a scan request received in this window is simply discarded (the in-progress scan will cover it anyway, since it re-reads the complete pending state).
 
 ### 6.4 Grace period
 
-Per ogni notifica pendente individuata dal recupero, al momento dell'invio si calcola lo scarto temporale tra l'istante corrente e il `ts` dell'evento originale (in `log.jsonl`):
+For every pending notification found by recovery, at send time the time gap between the current instant and the `ts` of the original event (in `log.jsonl`) is computed:
 
-- Se lo scarto è **entro il grace period configurato** (default: **5 minuti**), la notifica viene inviata come **notifica normale**, senza indicazioni di ritardo.
-- Se lo scarto **supera il grace period**, la notifica viene inviata con un prefisso esplicito (es. "⏪ Notifica recuperata") e il timestamp originale formattato secondo il formato e la timezone del destinatario.
-- Se il timestamp originale porta il flag `a: 1` (sezione 5.4), la notifica viene **sempre** inviata con il prefisso di recupero e con il timestamp marcato `~`, indipendentemente dallo scarto calcolato.
+- If the gap is **within the configured grace period** (default: **5 minutes**), the notification is sent as a **normal notification**, with no delay indication.
+- If the gap **exceeds the grace period**, the notification is sent with an explicit prefix (e.g. "⏪ Recovered notification") and the original timestamp formatted per the recipient's format and timezone.
+- If the original timestamp carries the `a: 1` flag (section 5.4), the notification is **always** sent with the recovery prefix and with the timestamp marked `~`, regardless of the computed gap.
 
-### 6.5 Classificazione degli esiti di invio
+### 6.5 Classification of send outcomes
 
-Non tutti i fallimenti meritano un retry: alcune risposte dell'API indicano una condizione **permanente**, che nessun numero di ritentativi risolverà. Senza questa distinzione una singola chat non più raggiungibile (utente che ha bloccato il bot) manterrebbe il timer di retry armato a vita, con un tentativo HTTPS inutile ogni ora e una segnalazione ricorrente nel riepilogo periodico.
+Not every failure deserves a retry: some API responses indicate a **permanent** condition that no number of retries will resolve. Without this distinction, a single chat that's no longer reachable (a user who blocked the bot) would keep the retry timer armed forever, with a useless HTTPS attempt every hour and a recurring flag in the periodic summary.
 
-| Categoria | Condizione rilevata | Trattamento |
+| Category | Detected condition | Treatment |
 |---|---|---|
-| **Successo** | HTTP 200 con `"ok": true` nel corpo | Notifica marcata `RESOLVED` (sezione 7) |
-| **Transitorio — rete** | Fallimento DNS/TCP/TLS, timeout, WiFi disconnesso | `PENDING`, retry programmato |
-| **Transitorio — server** | HTTP 5xx | `PENDING`, retry programmato |
-| **Throttling** | HTTP 429 | Gestito dal rate limiter (sezione 6.6), non conta come fallimento fino all'esaurimento dei ritentativi immediati |
-| **Permanente — destinatario** | HTTP 403 (`bot was blocked by the user`, `user is deactivated`), HTTP 400 (`chat not found`) | Notifica marcata `ABANDONED`, **nessun ulteriore tentativo**; segnalazione agli admin con il `chat_id` interessato |
-| **Errore di sistema** | HTTP 401 (token non valido), HTTP 404 sull'endpoint | Nessun invio è possibile verso nessuno: i pendenti **restano `PENDING`**, l'errore viene registrato ed esposto in `/status`. Non si marca nulla come `ABANDONED`, perché il problema non è del destinatario |
+| **Success** | HTTP 200 with `"ok": true` in the body | Notification marked `RESOLVED` (section 7) |
+| **Transient — network** | DNS/TCP/TLS failure, timeout, WiFi disconnected | `PENDING`, scheduled retry |
+| **Transient — server** | HTTP 5xx | `PENDING`, scheduled retry |
+| **Throttling** | HTTP 429 | Handled by the rate limiter (section 6.6), doesn't count as a failure until immediate retries are exhausted |
+| **Permanent — recipient** | HTTP 403 (`bot was blocked by the user`, `user is deactivated`), HTTP 400 (`chat not found`) | Notification marked `ABANDONED`, **no further attempt**; admins notified with the `chat_id` involved |
+| **System error** | HTTP 401 (invalid token), HTTP 404 on the endpoint | No send is possible to anyone: pending ones **stay `PENDING`**, the error is logged and exposed in `/status`. Nothing is marked `ABANDONED`, because the problem isn't the recipient's |
 
-**Limite ai tentativi transitori**: una notifica che accumula più di `max_retries` tentativi falliti (default: **24**, pari a 24 ore con l'intervallo di retry di default) viene marcata `ABANDONED` e segnalata nel riepilogo, per evitare che un pendente irrisolvibile resti protetto dalla rotazione indefinitamente.
+**Limit on transient attempts**: a notification that accumulates more than `max_retries` failed attempts (default: **24**, equal to 24 hours with the default retry interval) is marked `ABANDONED` and flagged in the summary, so that an unresolvable pending item doesn't stay protected from rotation indefinitely.
 
-**Nota implementativa (FastBot2)**: a differenza delle librerie che restituiscono un semplice `bool`, `bot.sendMessage(msg)` di FastBot2 (sezione 3.5) **ritorna direttamente un `fb::Result`**, che espone tutto il necessario per la classificazione senza wrapper né modifiche alla libreria:
+**Implementation note (FastBot2)**: unlike libraries that return a plain `bool`, FastBot2's `bot.sendMessage(msg)` (section 3.5) **returns an `fb::Result` directly**, which exposes everything needed for classification with no wrapper and no library modification:
 
 ```cpp
 fb::Result r = bot.sendMessage(msg);
 
 if (!r.isError()) {
-    // Successo: "ok": true nel corpo
+    // Success: "ok": true in the body
 } else if (r.isEmpty()) {
-    // Nessun corpo JSON ricevuto: fallimento di connessione (DNS/TCP/TLS/timeout)
-    // -> Transitorio - rete
+    // No JSON body received: connection failure (DNS/TCP/TLS/timeout)
+    // -> Transient - network
 } else {
-    // Corpo JSON con "ok": false: r.getErrorCode() e r.getError() rispecchiano
-    // esattamente error_code/description restituiti da Telegram
+    // JSON body with "ok": false: r.getErrorCode() and r.getError() mirror
+    // exactly the error_code/description returned by Telegram
     int code = r.getErrorCode().toInt32();
-    // 403/400 -> Permanente - destinatario
-    // 401/404 -> Errore di sistema
-    // 429     -> Throttling; retry_after tramite il parser interno:
+    // 403/400 -> Permanent - recipient
+    // 401/404 -> System error
+    // 429     -> Throttling; retry_after via the internal parser:
     uint32_t retryAfter = r._parser["parameters"]["retry_after"];
-    // 5xx     -> Transitorio - server
+    // 5xx     -> Transient - server
 }
 ```
 
-Il campo `error_code` restituito nel corpo JSON da Telegram **coincide numericamente** con lo status HTTP della richiesta (è la stessa convenzione usata dalla Bot API), quindi la tabella sopra si applica invariata leggendo `getErrorCode()` al posto dello status HTTP. La distinzione "nessun corpo JSON" (fallimento di connessione, `isEmpty()`) rispetto a "corpo JSON con errore" (`isError()` con `error_code` valorizzato) è ciò che separa i fallimenti transitori di rete da quelli riportati esplicitamente dall'API.
+The `error_code` field returned in Telegram's JSON body **numerically matches** the HTTP status of the request (it's the same convention used by the Bot API), so the table above applies unchanged when reading `getErrorCode()` in place of the HTTP status. The distinction "no JSON body" (connection failure, `isEmpty()`) versus "JSON body with an error" (`isError()` with `error_code` populated) is what separates transient network failures from those explicitly reported by the API.
 
 ### 6.6 Rate limiting
 
-Le API Telegram impongono limiti di frequenza (indicativamente ~1 messaggio al secondo per singola chat e ~30 messaggi al secondo complessivi), oltre i quali rispondono `HTTP 429` con un campo `parameters.retry_after` che indica i secondi di attesa richiesti.
+The Telegram API enforces rate limits (roughly ~1 message per second per single chat and ~30 messages per second overall), beyond which it responds `HTTP 429` with a `parameters.retry_after` field indicating the required wait in seconds.
 
-Lo scenario a rischio è esattamente quello previsto dal design: al rientro da un down prolungato il sistema invia in raffica il riepilogo degli eventi aperti, quello dei pendenti e tutte le notifiche recuperate, moltiplicati per il numero di utenti. Senza controllo di frequenza si otterrebbe un `429`, che verrebbe contato come fallimento, riarmando il timer di retry e producendo altri `429` al ciclo successivo.
+The at-risk scenario is exactly the one this design anticipates: on return from a prolonged outage, the system sends in a burst the open-events summary, the pending-notifications summary, and every recovered notification, multiplied by the number of users. Without rate control, a `429` would result, which would be counted as a failure, re-arming the retry timer and producing further `429`s on the next cycle.
 
-**Meccanismo adottato:**
+**Mechanism adopted:**
 
-- Tutti gli invii passano da un unico punto che impone un intervallo minimo di **1100 ms tra due messaggi consecutivi**, qualunque sia il destinatario. Con il numero di utenti previsto (pochi) questo singolo vincolo copre con margine sia il limite per-chat sia quello globale, senza richiedere due contatori separati.
-- L'attesa è realizzata con timer non bloccante: il loop continua a servire la coda degli interrupt (sezione 3.3) durante la pausa.
-- Alla ricezione di un **429**, il valore di `retry_after` viene rispettato integralmente e l'invio viene **ritentato fino a 3 volte** senza essere conteggiato come fallimento. Solo dopo il terzo `429` consecutivo la notifica viene marcata `PENDING` e passa al normale meccanismo di retry programmato.
+- All sends go through a single point that enforces a minimum interval of **1100 ms between two consecutive messages**, regardless of the recipient. With the expected number of users (few), this single constraint comfortably covers both the per-chat and the global limit, without requiring two separate counters.
+- The wait is implemented with a non-blocking timer: the loop keeps servicing the interrupt queue (section 3.3) during the pause.
+- On receiving a **429**, the `retry_after` value is honored in full and the send is **retried up to 3 times** without being counted as a failure. Only after the third consecutive `429` is the notification marked `PENDING` and handed to the normal scheduled-retry mechanism.
 
-### 6.7 Aggregazione dei messaggi di recupero
+### 6.7 Aggregation of recovery messages
 
-Una scansione di recupero (sezione 6.2) può trovare più notifiche pendenti per lo stesso utente nello stesso ciclo — tipico dopo un down di rete prolungato, dove si accumulano più eventi. Inviarle come messaggi separati, anche rispettando il rate limiter di sezione 6.6, produce comunque una raffica poco leggibile e consuma più chiamate API del necessario.
+A recovery scan (section 6.2) can find multiple pending notifications for the same user in the same cycle — typical after a prolonged network outage, where several events pile up. Sending them as separate messages, even while respecting the rate limiter in section 6.6, still produces a barely-readable burst and consumes more API calls than necessary.
 
-**Soglia di aggregazione** (default: **3**, configurabile, `/setaggregatethreshold`): se il numero di notifiche pendenti trovate per un dato `chat_id` in una singola scansione supera la soglia, vengono raggruppate in **un unico messaggio riassuntivo** invece di essere inviate una per una:
+**Aggregation threshold** (default: **3**, configurable, `/setaggregatethreshold`): if the number of pending notifications found for a given `chat_id` in a single scan exceeds the threshold, they're grouped into **a single summary message** instead of being sent one by one:
 
 ```
-⏪ 5 notifiche recuperate (dalle 14:02 alle 15:30):
-• Allarme garage — 14:02 → 14:07 (5m)
-• Mancanza rete 230V — 14:10 → 15:28 (1h 18m)
-• Riavvio — 15:29
+⏪ 5 recovered notifications (from 14:02 to 15:30):
+• Garage alarm — 14:02 → 14:07 (5m)
+• Mains power loss — 14:10 → 15:28 (1h 18m)
+• Reboot — 15:29
 ```
 
-- Sotto la soglia, il comportamento resta quello ordinario di sezione 6.4 (un messaggio per notifica, con o senza prefisso di recupero a seconda del grace period).
-- Il messaggio aggregato porta sempre il prefisso "recuperate" (è per definizione un raggruppamento di notifiche in ritardo) e riporta ogni evento con il proprio timestamp formattato secondo le preferenze del destinatario.
-- **Tracciamento**: l'aggregazione è solo un raggruppamento nella formattazione dell'invio Telegram — lo stato di ciascuna notifica in `notif_<chat_id>.jsonl` (sezione 7) resta individuale. Se l'invio del messaggio aggregato ha successo, ogni notifica del gruppo viene marcata `RESOLVED` singolarmente; se fallisce, ogni notifica del gruppo resta (o torna) `PENDING`, con il proprio contatore `n` incrementato, secondo le regole ordinarie di sezione 6.5.
-- L'aggregazione si applica solo all'interno di una singola scansione per un singolo utente: non accorpa mai eventi di utenti diversi, né notifiche trovate in scansioni diverse.
+- Below the threshold, behavior remains the ordinary one from section 6.4 (one message per notification, with or without the recovery prefix depending on the grace period).
+- The aggregated message always carries the "recovered" prefix (it's by definition a grouping of delayed notifications) and reports each event with its own timestamp formatted per the recipient's preferences.
+- **Tracking**: aggregation is only a grouping in the formatting of the Telegram send — the state of each notification in `notif_<chat_id>.jsonl` (section 7) stays individual. If the aggregated message send succeeds, every notification in the group is marked `RESOLVED` individually; if it fails, every notification in the group stays (or returns) `PENDING`, with its own `n` counter incremented, per the ordinary rules in section 6.5.
+- Aggregation applies only within a single scan for a single user: it never merges events from different users, nor notifications found in different scans.
 
 ---
 
-## 7. Architettura di storage delle notifiche
+## 7. Notification storage architecture
 
-### 7.1 Decisione
+### 7.1 Decision
 
-**Architettura scelta: Proposta E — log inverso, per-chat.** Un file dedicato per ciascun utente autorizzato, es. `notif_<chat_id>.jsonl`, contenente **esclusivamente** le righe relative a invii **non andati a buon fine al primo tentativo** (nessuna riga per gli invii riusciti immediatamente). Le proposte alternative valutate e scartate sono documentate in sezione 7.3, per riferimento futuro.
+**Architecture chosen: Proposal E — per-chat inverse log.** A dedicated file for each authorized user, e.g. `notif_<chat_id>.jsonl`, containing **only** rows for sends that **did not succeed on the first attempt** (no row for sends that succeeded immediately). The alternative proposals evaluated and rejected are documented in section 7.3, for future reference.
 
-Lo scopo del registro è tracciare **se il messaggio è stato inviato con successo alle API di Telegram per quell'utente**, non se l'utente lo abbia ricevuto o letto (vedi 6.1).
+The purpose of the log is to track **whether the message was successfully sent to the Telegram API for that user**, not whether the user received or read it (see 6.1).
 
-### 7.2 Schema del record
+### 7.2 Record schema
 
 ```json
-{"id": "<uuid evento, stesso formato esadecimale di 5.2>", "status": <enum, vedi sotto>, "ts": <epoch Unix>, "state": <enum, vedi sotto>, "n": <tentativi>}
+{"id": "<event uuid, same hex format as 5.2>", "status": <enum, see below>, "ts": <Unix epoch>, "state": <enum, see below>, "n": <attempts>}
 ```
 
-- **`id`**: stesso identificativo dell'evento in `log.jsonl` (sezione 5.2), per la correlazione.
-- **`status`**: quale notifica si sta tracciando, enum numerico:
+- **`id`**: same identifier as the event in `log.jsonl` (section 5.2), for correlation.
+- **`status`**: which notification is being tracked, numeric enum:
 
-  | Valore | Significato |
+  | Value | Meaning |
   |---|---|
   | `0` | `NOTIFIED_INSTANT` |
   | `1` | `NOTIFIED_START` |
   | `2` | `NOTIFIED_END` |
 
-- **`ts`**: per una riga `PENDING`, l'epoch dell'evento originale (utile per il calcolo del grace period); per una riga `RESOLVED`, l'epoch del momento dell'invio effettivo andato a buon fine; per una riga `ABANDONED`, l'epoch della rinuncia.
-- **`state`**: enum numerico:
+- **`ts`**: for a `PENDING` row, the epoch of the original event (useful for grace-period calculation); for a `RESOLVED` row, the epoch of the moment the send actually succeeded; for an `ABANDONED` row, the epoch of when it was given up on.
+- **`state`**: numeric enum:
 
-  | Valore | Significato |
+  | Value | Meaning |
   |---|---|
-  | `0` | `PENDING` — invio fallito in modo transitorio, in attesa di recupero |
-  | `1` | `RESOLVED` — invio successivamente riuscito |
-  | `2` | `ABANDONED` — invio definitivamente rinunciato (errore permanente o `max_retries` superato, vedi 6.5) |
+  | `0` | `PENDING` — send transiently failed, awaiting recovery |
+  | `1` | `RESOLVED` — send subsequently succeeded |
+  | `2` | `ABANDONED` — send definitively given up on (permanent error or `max_retries` exceeded, see 6.5) |
 
-- **`n`**: numero di tentativi di invio falliti accumulati fino a quel momento. Presente sulle righe `PENDING` e `ABANDONED`, omesso sulle `RESOLVED`. È il campo su cui si valuta il superamento di `max_retries`.
+- **`n`**: number of failed send attempts accumulated so far. Present on `PENDING` and `ABANDONED` rows, omitted on `RESOLVED`. This is the field against which exceeding `max_retries` is evaluated.
 
-Sequenza tipica per un singolo mancato invio poi recuperato:
+Typical sequence for a single missed send later recovered:
 ```json
 {"id":"a1b2c3d4e5f60718293a4b5c6d7e8f90","status":0,"ts":1755500000,"state":0,"n":1}
 {"id":"a1b2c3d4e5f60718293a4b5c6d7e8f90","status":0,"ts":1755500910,"state":1}
 ```
 
-**Comportamento nel caso comune** (invio riuscito al primo tentativo, atteso essere la stragrande maggioranza dei casi data l'alimentazione garantita dalla batteria della centralina): **nessuna riga viene scritta** in questo file. Il file di un utente il cui bot funziona regolarmente resta quasi sempre vuoto o minimo.
+**Behavior in the common case** (send succeeds on the first attempt, expected to be the vast majority of cases given the power guaranteed by the panel's battery): **no row is written** to this file. The file for a user whose bot is working normally stays empty or minimal almost all the time.
 
-**Ricostruzione dello stato pendente**: una notifica è ancora da recuperare se esiste una riga `PENDING` per quel `(id, status)` **non seguita** da una riga `RESOLVED` o `ABANDONED` per la stessa coppia. La ricostruzione avviene leggendo il file una sola volta in streaming e mantenendo in RAM una mappa `(id, status) → stato più recente`.
+**Reconstructing pending state**: a notification is still to be recovered if a `PENDING` row exists for that `(id, status)` pair **not followed** by a `RESOLVED` or `ABANDONED` row for the same pair. Reconstruction happens by reading the file once, in streaming, while keeping an in-RAM map `(id, status) → most recent state`.
 
-**Aggiornamento del contatore tentativi**: ad ogni ulteriore fallimento **non viene aggiunta una nuova riga** per ogni tentativo; viene invece appesa una singola riga `PENDING` aggiornata con il nuovo valore di `n`, che sostituisce logicamente la precedente (l'ultima riga presente per una data coppia `(id, status)` è sempre quella valida). Questo mantiene il file compatto anche durante down prolungati, e le righe superate vengono eliminate alla prima rotazione.
+**Updating the attempt counter**: on every further failure, **a new row is not appended per attempt**; instead, a single updated `PENDING` row is appended with the new `n` value, which logically supersedes the previous one (the last row present for a given `(id, status)` pair is always the valid one). This keeps the file compact even during prolonged outages, and superseded rows are removed at the first rotation.
 
-**Eventi irrisolti a lungo termine**: un record `PENDING` che si avvicina a `max_retries` viene segnalato nel riepilogo periodico insieme agli eventi aperti (sezione 8), per non perderne traccia silenziosamente. Il passaggio ad `ABANDONED` è a sua volta notificato agli admin.
+**Long-unresolved events**: a `PENDING` record approaching `max_retries` is flagged in the periodic summary together with open events (section 8), so as not to silently lose track of it. The transition to `ABANDONED` is in turn notified to admins.
 
-**Rimozione di un utente**: coerente con l'architettura per-chat, basta cancellare il file `notif_<chat_id>.jsonl` corrispondente, senza impatto sugli altri utenti.
+**Removing a user**: consistent with the per-chat architecture, it's enough to delete the corresponding `notif_<chat_id>.jsonl` file, with no impact on other users.
 
-### 7.3 Proposte alternative scartate
+### 7.3 Rejected alternative proposals
 
-Le seguenti alternative sono state valutate ma **non adottate**. Restano documentate per riferimento, nel caso emergano requisiti che ne rendano preferibile una revisione della scelta.
+The following alternatives were evaluated but **not adopted**. They remain documented for reference, in case requirements emerge that make revisiting the choice preferable.
 
-#### Proposta A — Log positivo unico, una riga per (evento, chat)
+#### Proposal A — Single positive log, one row per (event, chat)
 
-Un unico file `notifications.jsonl`, con una riga per ogni combinazione evento/destinatario notificato con successo:
+A single `notifications.jsonl` file, with one row for every successfully-notified event/recipient combination:
 ```json
-{"id": "<uuid evento>", "chat_id": 111, "status": "NOTIFIED_START", "ts": <epoch invio>}
+{"id": "<event uuid>", "chat_id": 111, "status": "NOTIFIED_START", "ts": <send epoch>}
 ```
 
-| Pro | Contro |
+| Pros | Cons |
 |---|---|
-| Semplice, coerente con lo schema del log eventi | Scritture e righe crescono come *eventi × numero di chat* |
-| Audit trail completo di ogni notifica ricevuta da ogni utente | File cresce più rapidamente, più usura flash, scansioni di recupero ripetute per ogni chat |
+| Simple, consistent with the event-log schema | Writes and rows grow as *events × number of chats* |
+| Complete audit trail of every notification received by every user | File grows faster, more flash wear, repeated recovery scans per chat |
 
-#### Proposta B — Log positivo unico, riga aggregata per round di invio
+#### Proposal B — Single positive log, one aggregated row per send round
 
-Una sola riga per ogni "giro" di tentativo, con l'elenco delle chat servite con successo in quel giro:
+A single row for every attempt "round", with the list of chats successfully served in that round:
 ```json
-{"id": "<uuid evento>", "status": "NOTIFIED_START", "ts": <epoch>, "chats": [111, 222]}
+{"id": "<event uuid>", "status": "NOTIFIED_START", "ts": <epoch>, "chats": [111, 222]}
 ```
 
-| Pro | Contro |
+| Pros | Cons |
 |---|---|
-| Riduce le scritture (1 per round, non 1 per chat) | Scrive comunque anche nel caso banale (tutti ricevono al primo colpo) |
-| Mantiene un log positivo completo | Ricostruzione più complessa (unione di insiemi tra più righe) |
+| Reduces writes (1 per round, not 1 per chat) | Still writes even in the trivial case (everyone receives it on the first try) |
+| Keeps a complete positive log | More complex reconstruction (set union across multiple rows) |
 
-#### Proposta C — Log positivo per-chat (un file per utente)
+#### Proposal C — Per-chat positive log (one file per user)
 
-Un file separato per ciascun utente, es. `notif_111.jsonl`, `notif_222.jsonl`, contenente **tutti** gli invii riusciti (non solo i recuperati).
+A separate file for each user, e.g. `notif_111.jsonl`, `notif_222.jsonl`, containing **all** successful sends (not just the recovered ones).
 
-| Pro | Contro |
+| Pros | Cons |
 |---|---|
-| Isolamento naturale: rimuovere un utente = cancellare un file | Tanti file quante le chat |
-| Rotazione indipendente per utente | Scrive comunque ad ogni successo |
+| Natural isolation: removing a user = deleting a file | As many files as there are chats |
+| Independent rotation per user | Still writes on every success |
 
-#### Proposta D — Log inverso (solo i mancati invii), condiviso
+#### Proposal D — Inverse log (failed sends only), shared
 
-Come la Proposta E adottata, ma in un **unico file condiviso** tra tutti gli utenti invece che per-chat.
+Like the adopted Proposal E, but in a **single file shared** among all users instead of per-chat.
 
-| Pro | Contro |
+| Pros | Cons |
 |---|---|
-| Zero scritture nel caso comune, come E | Nessun isolamento per utente: rimuovere un utente richiede filtrare/riscrivere il file condiviso invece di cancellare un file dedicato |
-| Un solo file da gestire | Le scansioni di recupero devono comunque filtrare per chat all'interno di un file più eterogeneo |
+| Zero writes in the common case, like E | No per-user isolation: removing a user requires filtering/rewriting the shared file instead of deleting a dedicated one |
+| Only one file to manage | Recovery scans still have to filter by chat within a more heterogeneous file |
 
-#### Proposta F — Watermark per utente (nessun file di notifiche)
+#### Proposal F — Per-user watermark (no notification file)
 
-Un solo intero per utente (l'epoch dell'ultimo evento notificato con successo), salvato in `userconfig.json`; il recupero rilegge da `log.jsonl` tutti gli eventi con `ts` successivo al watermark. Eliminerebbe completamente i file di notifica e la loro rotazione, unificando il meccanismo con il filtro `added_ts` di sezione 4.6.
+A single integer per user (the epoch of the last successfully-notified event), saved in `userconfig.json`; recovery re-reads `log.jsonl` for all events with `ts` after the watermark. This would completely eliminate notification files and their rotation, unifying the mechanism with the `added_ts` filter from section 4.6.
 
-| Pro | Contro |
+| Pros | Cons |
 |---|---|
-| Rimuove del tutto un file, la sua rotazione e la sincronizzazione con il log eventi | Un fallimento su un evento seguito da un successo su quello dopo non è rappresentabile: o si tiene fermo il watermark (rischio di notifica duplicata) o si perde traccia del fallimento |
-| Nessuna scrittura aggiuntiva: il watermark vive in un file già riscritto per altri motivi | Nessun audit di quali notifiche siano state effettivamente recuperate |
+| Removes an entire file, its rotation, and the sync with the event log | A failure on one event followed by a success on the next isn't representable: either the watermark is held back (risking a duplicate notification) or track of the failure is lost |
+| No additional writes: the watermark lives in a file already rewritten for other reasons | No audit of which notifications were actually recovered |
 
-Scartata a favore della Proposta E, che rappresenta esattamente lo stato di ogni singola notifica senza ambiguità.
+Rejected in favor of Proposal E, which represents the exact state of every single notification with no ambiguity.
 
 ---
 
-## 8. Gestione degli eventi aperti
+## 8. Open event management
 
-Se un evento con durata (es. `ALARM_GENERAL`, `ALARM_INTERNAL`, `ALARM_GARAGE`, `POWER_LOSS`, `NETWORK_ISSUE`) risulta ancora privo di riga `END` al momento di un riavvio inatteso dell'Arduino:
+If a duration event (e.g. `ALARM_GENERAL`, `ALARM_INTERNAL`, `ALARM_GARAGE`, `POWER_LOSS`, `NETWORK_ISSUE`) is still missing its `END` row at the time of an unexpected Arduino reboot:
 
-- **Non viene chiuso automaticamente.** Resta "aperto" nel registro fino a gestione manuale.
-- Al boot, se vengono rilevati eventi aperti precedenti al riavvio, il sistema invia un **messaggio di riepilogo** a tutti gli utenti autorizzati con l'elenco degli eventi ancora aperti (tipo e timestamp di inizio formattato secondo le preferenze di ciascun destinatario). Lo stesso riepilogo include anche eventuali notifiche `PENDING` prossime alla rinuncia (sezione 7.2).
-- Lo stesso riepilogo viene incluso anche **ad ogni ciclo di rotazione** (vedi sezione 9), come promemoria periodico.
-- Gli eventi aperti sono **sempre esclusi dalla cancellazione automatica** in fase di rotazione, indipendentemente dalla loro età.
+- **It is not automatically closed.** It stays "open" in the log until manually handled.
+- At boot, if open events predating the reboot are detected, the system sends a **summary message** to every authorized user listing the still-open events (type and start timestamp formatted per each recipient's preferences). The same summary also includes any `PENDING` notifications close to being abandoned (section 7.2).
+- The same summary is also included at **every rotation cycle** (see section 9), as a periodic reminder.
+- Open events are **always excluded from automatic deletion** during rotation, regardless of their age.
 
-### 8.1 Chiusura tramite bottoni inline
+### 8.1 Closing via inline buttons
 
-La chiusura manuale avviene **primariamente tramite bottoni inline** allegati al messaggio di riepilogo, per non richiedere all'utente di digitare un identificativo di 32 caratteri esadecimali da smartphone — operazione impraticabile, per giunta richiesta proprio nei momenti meno comodi.
+Manual closing happens **primarily via inline buttons** attached to the summary message, so as not to require the user to type a 32-character hex identifier from a smartphone — an impractical operation, required, on top of that, at exactly the least convenient moments.
 
-- Il messaggio di riepilogo inviato **agli admin** include una tastiera inline (`fb::InlineKeyboard`, sezione 3.5) con un bottone per ciascun evento aperto, costruita dinamicamente in un ciclo (`addButton(label, data).newRow()` per ogni evento — il numero di eventi aperti non è fisso), etichettato in modo leggibile (es. `Chiudi: Allarme garage (14:02)`).
-- Il `callback_data` del bottone ha il formato `c:<id>` — 34 byte, entro il limite di 64 byte imposto da Telegram.
-- Il riepilogo inviato agli **utenti standard** è identico ma **privo di bottoni**: l'autorizzazione non è delegata alla sola invisibilità del comando.
-- Alla ricezione della callback query (`u.isQuery()` nel gestore `onUpdate` di FastBot2) il sistema:
-  1. Rivaluta l'autorizzazione del mittente (`u.query().from().id()` deve essere un admin in whitelist), **senza fidarsi del fatto che il bottone fosse visibile**: le callback possono essere inoltrate.
-  2. Verifica che l'evento indicato (`u.query().data()`, parsando l'`id` dopo il prefisso `c:`) sia ancora aperto (protezione contro il doppio click e contro un secondo admin che ha già chiuso l'evento).
-  3. Scrive la riga `END` con `ts` pari al momento del click e attiva il normale flusso di notifica per quell'`END`.
-  4. Risponde con `bot.answerCallbackQuery(u.query().id(), ...)` e aggiorna la tastiera del messaggio rimuovendo il bottone consumato (`bot.editMenu(...)`, ricostruendo la tastiera senza il bottone chiuso). **Nota**: se non si risponde esplicitamente alla query, FastBot2 invia comunque una risposta vuota automatica dopo un timeout — la chiamata esplicita resta comunque preferibile per dare un riscontro testuale immediato ("Evento chiuso") invece di lasciare lo spinner fino al timeout automatico.
+- The summary message sent **to admins** includes an inline keyboard (`fb::InlineKeyboard`, section 3.5) with one button per open event, built dynamically in a loop (`addButton(label, data).newRow()` for each event — the number of open events isn't fixed), labeled readably (e.g. `Close: Garage alarm (14:02)`).
+- The button's `callback_data` has the format `c:<id>` — 34 bytes, within the 64-byte limit imposed by Telegram.
+- The summary sent to **standard users** is identical but **without buttons**: authorization isn't delegated to the command's mere invisibility.
+- On receiving the callback query (`u.isQuery()` in FastBot2's `onUpdate` handler), the system:
+  1. Re-evaluates the sender's authorization (`u.query().from().id()` must be an admin on the whitelist), **without trusting that the button was visible**: callbacks can be forwarded.
+  2. Verifies that the indicated event (`u.query().data()`, parsing the `id` after the `c:` prefix) is still open (protection against a double-click and against a second admin who already closed the event).
+  3. Writes the `END` row with `ts` equal to the moment of the click and triggers the normal notification flow for that `END`.
+  4. Replies with `bot.answerCallbackQuery(u.query().id(), ...)` and updates the message's keyboard, removing the consumed button (`bot.editMenu(...)`, rebuilding the keyboard without the closed button). **Note**: if the query isn't explicitly answered, FastBot2 still sends an automatic empty reply after a timeout — the explicit call remains preferable regardless, to give immediate textual feedback ("Event closed") instead of leaving the spinner until the automatic timeout.
 
-Resta disponibile come **fallback** il comando testuale `/closeevent <id> [timestamp]` (riservato agli admin), utile quando il messaggio di riepilogo non è più raggiungibile o quando si vuole specificare un timestamp di chiusura diverso dall'istante corrente. L'`id` completo è ottenibile da `/log`.
+The text command `/closeevent <id> [timestamp]` (admin-only) remains available as a **fallback**, useful when the summary message is no longer reachable or when a close timestamp different from the current instant is wanted. The full `id` is obtainable from `/log`.
 
 ---
 
-## 9. Rotazione del registro
+## 9. Log rotation
 
-### 9.1 Politica di retention
+### 9.1 Retention policy
 
-- Il periodo di validità del log eventi è **configurabile in settimane** (default di 52), impostabile solo da utenti admin.
-- Gli eventi conclusi (con riga `END` o `INSTANT` presenti) più vecchi del periodo configurato vengono eliminati.
-- Gli eventi ancora aperti (senza `END`) sono **sempre protetti** dalla cancellazione, indipendentemente dall'età.
-- I file `notif_<chat_id>.jsonl` seguono la stessa politica di retention: righe `RESOLVED` e `ABANDONED` più vecchie del periodo configurato vengono rimosse in fase di rotazione; righe `PENDING` restano sempre protette (coerentemente con la protezione degli eventi aperti). Il passaggio ad `ABANDONED` previsto dalla sezione 6.5 garantisce che nessun pendente resti protetto indefinitamente.
+- The event log's validity period is **configurable in weeks** (default 52), settable only by admin users.
+- Concluded events (with an `END` or `INSTANT` row present) older than the configured period are deleted.
+- Still-open events (with no `END`) are **always protected** from deletion, regardless of age.
+- `notif_<chat_id>.jsonl` files follow the same retention policy: `RESOLVED` and `ABANDONED` rows older than the configured period are removed during rotation; `PENDING` rows are always protected (consistent with the protection of open events). The transition to `ABANDONED` foreseen by section 6.5 guarantees that no pending item stays protected indefinitely.
 
-### 9.2 Cadenza
+### 9.2 Cadence
 
-Data la capacità di storage disponibile (16 MB) e il basso volume di eventi atteso, la rotazione avviene con **cadenza settimanale**, tramite un controllo leggero in RAM (confronto col timestamp dell'ultima rotazione, salvato in NVS), senza scansione del file per determinare se la rotazione è dovuta.
+Given the available storage capacity (16 MB) and the low expected event volume, rotation runs on a **weekly cadence**, via a lightweight in-RAM check (comparison against the last-rotation timestamp, saved in NVS), with no file scan to determine whether rotation is due.
 
-Una rotazione **anticipata** può essere innescata dalla sorveglianza dello spazio disponibile (sezione 9.4).
+An **early** rotation can be triggered by available-space monitoring (section 9.4).
 
-### 9.3 Meccanismo di esecuzione
+### 9.3 Execution mechanism
 
-Poiché LittleFS non supporta la cancellazione selettiva di righe, la rotazione è implementata come **riscrittura filtrata** dell'intero file (per `log.jsonl` e per ciascun `notif_<chat_id>.jsonl`).
+Since LittleFS doesn't support selective row deletion, rotation is implemented as a **filtered rewrite** of the entire file (for `log.jsonl` and for each `notif_<chat_id>.jsonl`).
 
-#### 9.3.1 Algoritmo a due passate con RAM limitata
+#### 9.3.1 Two-pass algorithm with bounded RAM
 
-Un raggruppamento in memoria di *tutte* le righe per `id` richiederebbe RAM proporzionale alla dimensione del file — inaccettabile su un microcontrollore, e un limite che si manifesterebbe solo dopo mesi di esercizio. L'algoritmo è quindi a due passate con occupazione di memoria **fissa e nota a priori**:
+Grouping *all* rows by `id` in memory would require RAM proportional to the file's size — unacceptable on a microcontroller, and a limit that would only manifest after months of operation. The algorithm is therefore two-pass, with **fixed, a-priori-known** memory usage:
 
-1. **Passata 1 (raccolta)**: lettura in streaming del file, senza mai tenerlo in memoria. Si costruisce l'insieme degli `id` **eliminabili** — eventi che possiedono una riga `END`/`INSTANT` e il cui `ts` di riferimento è anteriore al cutoff di retention. Gli `id` sono memorizzati in forma **binaria a 16 byte** (non come 32 caratteri esadecimali), con un tetto rigido di **256 id** ≈ **4 KB di RAM**. Raggiunto il tetto, la raccolta si ferma.
-2. **Passata 2 (riscrittura)**: seconda lettura in streaming, scrivendo su file temporaneo tutte le righe il cui `id` non appartiene all'insieme raccolto.
-3. **Ripetizione**: se nella passata 1 il tetto dei 256 id era stato raggiunto, l'intero ciclo viene **ripetuto** sul file appena riscritto, finché una passata 1 termina senza saturare il tetto. La terminazione è garantita perché ogni ciclo rimuove almeno un evento.
+1. **Pass 1 (collection)**: streaming read of the file, never holding it in memory. The set of **deletable** `id`s is built — events that have an `END`/`INSTANT` row and whose reference `ts` is earlier than the retention cutoff. IDs are stored in **16-byte binary form** (not as 32 hex characters), with a hard cap of **256 ids** ≈ **4 KB of RAM**. Once the cap is reached, collection stops.
+2. **Pass 2 (rewrite)**: a second streaming read, writing to a temporary file every row whose `id` doesn't belong to the collected set.
+3. **Repetition**: if pass 1 hit the 256-id cap, the entire cycle is **repeated** on the just-rewritten file, until a pass 1 completes without saturating the cap. Termination is guaranteed because every cycle removes at least one event.
 
-Questo mantiene l'occupazione di memoria costante indipendentemente dalla dimensione del file, al prezzo di più passate solo nei casi (rari) di arretrato consistente.
+This keeps memory usage constant regardless of file size, at the cost of multiple passes only in the (rare) cases of a substantial backlog.
 
-#### 9.3.2 Ordine di commit
+#### 9.3.2 Commit order
 
-L'ordine delle operazioni finali è vincolante per la resistenza alle interruzioni di alimentazione:
+The order of the final operations is binding for resilience to power interruptions:
 
-1. Scrittura completa del file temporaneo.
-2. `flush()` / `close()` del file temporaneo.
-3. **Rinomina atomica** sopra il file originale (pattern write-then-rename; LittleFS garantisce l'atomicità del rename anche in caso di power-loss).
-4. **Solo dopo** il rename riuscito, aggiornamento in NVS del timestamp dell'ultima rotazione.
+1. Complete write of the temporary file.
+2. `flush()` / `close()` of the temporary file.
+3. **Atomic rename** over the original file (write-then-rename pattern; LittleFS guarantees rename atomicity even on power loss).
+4. **Only after** the rename succeeds, update the last-rotation timestamp in NVS.
 
-Invertire i punti 3 e 4 farebbe sì che un blackout nella finestra intermedia registri come "eseguita" una rotazione che non ha modificato nulla, saltando un intero ciclo settimanale. Con l'ordine indicato, lo stesso blackout provoca al più la ripetizione di una rotazione già fatta — operazione idempotente e innocua.
+Reversing points 3 and 4 would mean a blackout in the intermediate window would register as "done" a rotation that changed nothing, skipping an entire weekly cycle. With the order given, the same blackout at most causes a rotation already done to be repeated — an idempotent, harmless operation.
 
-Il file temporaneo residuo di una rotazione interrotta viene rilevato ed eliminato al boot successivo.
+A leftover temporary file from an interrupted rotation is detected and deleted at the next boot.
 
-### 9.4 Gestione dello spazio e degli errori di filesystem
+### 9.4 Filesystem space and error handling
 
-Il filesystem è un punto di guasto silenzioso: una scrittura fallita per spazio esaurito o per corruzione farebbe perdere eventi senza che nessuno se ne accorga.
+The filesystem is a silent point of failure: a write that fails due to exhausted space or corruption would lose events with no one noticing.
 
-**Sorveglianza dello spazio.** L'occupazione (`LittleFS.usedBytes()` / `totalBytes()`) viene verificata al boot, dopo ogni rotazione e periodicamente:
+**Space monitoring.** Usage (`LittleFS.usedBytes()` / `totalBytes()`) is checked at boot, after every rotation, and periodically:
 
-| Soglia | Comportamento |
+| Threshold | Behavior |
 |---|---|
-| < 80% | Funzionamento normale |
-| ≥ 80% | **Rotazione anticipata** immediata, fuori dalla cadenza settimanale, e segnalazione agli admin |
-| ≥ 95% | **Modalità degradata**: notifica agli admin; il log eventi continua ad avere priorità di scrittura, mentre le scritture non essenziali (righe di notifica `PENDING`) vengono sospese. Perdere la traccia di un tentativo di notifica è preferibile a perdere il rilevamento dell'evento |
+| < 80% | Normal operation |
+| ≥ 80% | Immediate **early rotation**, outside the weekly cadence, and admins notified |
+| ≥ 95% | **Degraded mode**: admins notified; the event log continues to have write priority, while non-essential writes (`PENDING` notification rows) are suspended. Losing track of a notification attempt is preferable to losing event detection |
 
-**Errori di scrittura.** Ogni operazione di scrittura verifica sia l'esito di `open()` sia il numero di byte effettivamente scritti da `write()`/`println()` (una scrittura parziale su LittleFS non solleva eccezioni: restituisce semplicemente un conteggio inferiore).
+**Write errors.** Every write operation checks both the outcome of `open()` and the number of bytes actually written by `write()`/`println()` (a partial write on LittleFS doesn't raise an exception: it simply returns a lower count).
 
-- In caso di fallimento, l'operazione viene ritentata una volta; se fallisce di nuovo, un **contatore di errori di filesystem** viene incrementato.
-- Il contatore è esposto in `/status` e il primo errore genera una notifica agli admin.
-- Un fallimento di scrittura **non blocca** l'invio della notifica Telegram corrispondente: la notifica in tempo reale ha priorità sulla persistenza dello storico.
-- Se `LittleFS.begin()` fallisce al boot, il sistema tenta un solo `format()` **esclusivamente se il filesystem risulta non montabile** (mai come reazione a un errore su un FS montato correttamente), e notifica l'accaduto agli admin: la perdita dello storico deve sempre essere un evento visibile, mai silenzioso.
+- On failure, the operation is retried once; if it fails again, a **filesystem error counter** is incremented.
+- The counter is exposed in `/status` and the first error generates an admin notification.
+- A write failure **does not block** the corresponding Telegram notification send: real-time notification has priority over history persistence.
+- If `LittleFS.begin()` fails at boot, the system attempts a single `format()` **exclusively if the filesystem turns out to be unmountable** (never as a reaction to an error on a properly-mounted FS), and notifies admins of what happened: losing the history must always be a visible event, never a silent one.
 
 ---
 
-## 10. Gestione timezone e ora legale
+## 10. Timezone and daylight-saving management
 
-### 10.1 Fusi orari preimpostati
+### 10.1 Preset timezones
 
-L'utente sceglie il proprio fuso orario da un **set predefinito** di opzioni comuni, evitando di dover inserire manualmente stringhe tecniche. Ogni opzione è internamente mappata a una **stringa TZ in formato POSIX**:
+The user chooses their own timezone from a **predefined set** of common options, avoiding the need to manually enter technical strings. Each option is internally mapped to a **POSIX-format TZ string**:
 
-| Preset | Copre anche | Stringa TZ POSIX | DST |
+| Preset | Also covers | POSIX TZ string | DST |
 |---|---|---|---|
 | `UTC` | — (default) | `UTC0` | No |
-| `Europe/Rome` | Italia | `CET-1CEST,M3.5.0,M10.5.0/3` | Sì (CET/CEST) |
-| `Europe/Berlin` | Germania, Francia, Spagna, Benelux (stesso fuso di Roma) | `CET-1CEST,M3.5.0,M10.5.0/3` | Sì (CET/CEST) |
-| `Europe/London` | Regno Unito | `GMT0BST,M3.5.0/1,M10.5.0` | Sì (GMT/BST) |
-| `Europe/Moscow` | Russia europea | `MSK-3` | No |
-| `America/New_York` | USA orientali | `EST5EDT,M3.2.0,M11.1.0` | Sì (EST/EDT) |
-| `America/Los_Angeles` | USA occidentali | `PST8PDT,M3.2.0,M11.1.0` | Sì (PST/PDT) |
+| `Europe/Rome` | Italy | `CET-1CEST,M3.5.0,M10.5.0/3` | Yes (CET/CEST) |
+| `Europe/Berlin` | Germany, France, Spain, Benelux (same timezone as Rome) | `CET-1CEST,M3.5.0,M10.5.0/3` | Yes (CET/CEST) |
+| `Europe/London` | United Kingdom | `GMT0BST,M3.5.0/1,M10.5.0` | Yes (GMT/BST) |
+| `Europe/Moscow` | European Russia | `MSK-3` | No |
+| `America/New_York` | Eastern US | `EST5EDT,M3.2.0,M11.1.0` | Yes (EST/EDT) |
+| `America/Los_Angeles` | Western US | `PST8PDT,M3.2.0,M11.1.0` | Yes (PST/PDT) |
 
-`Europe/Rome` ed `Europe/Berlin` condividono la stessa stringa POSIX (stesso fuso orario e stesse regole di cambio ora legale a livello UE): sono offerti come preset distinti solo per comodità di selezione, non perché richiedano una regola diversa. La lista è pensata per coprire l'uso familiare atteso (Italia come caso principale, più qualche fuso comune per parenti/amici altrove); è estendibile in futuro aggiungendo altre righe alla tabella, senza impatto sulle preferenze già impostate dagli utenti esistenti.
+`Europe/Rome` and `Europe/Berlin` share the same POSIX string (same timezone and same EU-wide DST-change rules): they're offered as distinct presets purely for selection convenience, not because they require a different rule. The list is meant to cover the expected family use (Italy as the main case, plus a few common timezones for relatives/friends elsewhere); it's extensible in the future by adding more rows to the table, with no impact on preferences already set by existing users.
 
-### 10.2 Gestione automatica dell'ora legale (DST)
+### 10.2 Automatic daylight-saving (DST) handling
 
-Il formato POSIX della stringa TZ codifica sia l'offset standard sia la regola di passaggio ora legale/solare. Impostando questa stringa nell'ambiente del microcontrollore (`setenv("TZ", ...)` + `tzset()`, o l'equivalente `configTzTime()`), tutte le conversioni da epoch a data/ora locale gestiscono **automaticamente** il cambio ora legale, senza calcoli manuali né servizi esterni.
+The POSIX format of the TZ string encodes both the standard offset and the daylight/standard time transition rule. By setting this string in the microcontroller's environment (`setenv("TZ", ...)` + `tzset()`, or the equivalent `configTzTime()`), every conversion from epoch to local date/time **automatically** handles the DST change, with no manual calculation and no external services.
 
-### 10.3 Timezone per utente
+### 10.3 Per-user timezone
 
-Il fuso orario è una **preferenza personale** salvata in `userconfig.json` (sezione 4.4): ogni utente imposta il proprio fuso indipendentemente dagli altri. Poiché la variabile d'ambiente `TZ` è globale al processo, la formattazione per un destinatario specifico richiede di impostare `TZ` immediatamente prima della conversione e di ripristinarla dopo (o di concentrare tutte le formattazioni per destinatario in un unico punto del codice, serializzate).
+The timezone is a **personal preference** saved in `userconfig.json` (section 4.4): each user sets their own timezone independently of the others. Since the `TZ` environment variable is global to the process, formatting for a specific recipient requires setting `TZ` immediately before the conversion and restoring it afterward (or concentrating every per-recipient formatting operation in a single, serialized point in the code).
 
 ---
 
-## 11. Configurazione
+## 11. Configuration
 
-### 11.1 Configurazioni globali (NVS, solo admin)
+### 11.1 Global configuration (NVS, admin only)
 
-| Parametro | Default | Comando |
+| Parameter | Default | Command |
 |---|---|---|
-| Periodo di validità log eventi e notifiche | 52 settimane | `/setretention <settimane>` |
-| Grace period recupero notifiche | 5 minuti | `/setgraceperiod <minuti>` |
-| Intervallo retry programmato | 60 minuti | `/setretryinterval <minuti>` |
-| Numero massimo di tentativi prima della rinuncia | 24 | `/setmaxretries <n>` |
-| Soglia di durata per generare `NETWORK_ISSUE` | 120 secondi | `/setnetthreshold <secondi>` |
-| Soglia di aggregazione notifiche recuperate | 3 | `/setaggregatethreshold <n>` |
+| Event/notification log validity period | 52 weeks | `/setretention <weeks>` |
+| Notification recovery grace period | 5 minutes | `/setgraceperiod <minutes>` |
+| Scheduled retry interval | 60 minutes | `/setretryinterval <minutes>` |
+| Maximum number of attempts before giving up | 24 | `/setmaxretries <n>` |
+| Duration threshold to generate `NETWORK_ISSUE` | 120 seconds | `/setnetthreshold <seconds>` |
+| Recovered-notification aggregation threshold | 3 | `/setaggregatethreshold <n>` |
 
-Chiavi NVS di servizio, non modificabili da comando: `schema_ver` (5.5), `last_epoch` (5.4.1), timestamp ultima rotazione (9.3.2).
+Service NVS keys, not modifiable by command: `schema_ver` (5.5), `last_epoch` (5.4.1), last-rotation timestamp (9.3.2).
 
-### 11.2 Configurazioni per utente (`userconfig.json`, ogni utente sulle proprie)
+### 11.2 Per-user configuration (`userconfig.json`, each user on their own)
 
-| Parametro | Default | Comando |
+| Parameter | Default | Command |
 |---|---|---|
-| Formato data/ora | ISO 8601 | `/setdateformat <formato>` |
+| Date/time format | ISO 8601 | `/setdateformat <format>` |
 | Timezone | `UTC` | `/settimezone <preset>` |
-| Tipi di evento notificati | Tutti abilitati | `/notify <tipo_evento> on\|off` |
+| Notified event types | All enabled | `/notify <event_type> on\|off` |
 
-**Nota importante**: la whitelist personale dei tipi di evento notificati filtra solo l'**invio delle notifiche a quello specifico utente**, non la **scrittura nel log eventi**. Tutti gli eventi vengono sempre registrati nello storico condiviso, indipendentemente dalle preferenze di notifica di ciascun utente. (Per disattivare invece un tipo a livello di sistema, si usa il flag `enabled` della tabella di sezione 3.2.1.)
+**Important note**: a user's personal whitelist of notified event types only filters **sending notifications to that specific user**, not **writing to the event log**. Every event is always recorded in the shared history, regardless of each user's notification preferences. (To instead disable a type system-wide, the `enabled` flag in the table in section 3.2.1 is used.)
 
 ---
 
-## 12. Comandi Telegram previsti
+## 12. Planned Telegram commands
 
-| Comando | Permesso richiesto | Funzione |
+| Command | Required permission | Function |
 |---|---|---|
-| `/log [n]` | Utente autorizzato | Mostra gli ultimi n **eventi** (non righe) dal registro, aggregati e formattati secondo le preferenze del richiedente — vedi 12.1 |
-| `/status` | Utente autorizzato | Stato corrente del sistema — vedi 12.2 |
-| `/config` | Utente autorizzato | Mostra la propria configurazione personale (e, se admin, anche quella globale) |
-| `/setdateformat <formato>` | Utente autorizzato | Imposta il proprio formato di visualizzazione data/ora |
-| `/settimezone <preset>` | Utente autorizzato | Imposta il proprio fuso orario da un set predefinito |
-| `/notify <tipo_evento> on\|off` | Utente autorizzato | Abilita/disabilita per sé la notifica per una tipologia di evento |
-| `/setretention <settimane>` | Admin | Imposta il periodo di validità globale del log in settimane |
-| `/setgraceperiod <minuti>` | Admin | Imposta il grace period globale per il recupero notifiche |
-| `/setretryinterval <minuti>` | Admin | Imposta l'intervallo globale del retry programmato |
-| `/setmaxretries <n>` | Admin | Imposta il numero di tentativi oltre il quale una notifica è abbandonata |
-| `/setnetthreshold <secondi>` | Admin | Imposta la durata minima di un down di connettività perché generi un evento |
-| `/setaggregatethreshold <n>` | Admin | Imposta la soglia oltre la quale le notifiche recuperate vengono raggruppate in un unico messaggio |
-| `/closeevent <id> [timestamp]` | Admin | Chiude manualmente un evento rimasto aperto (fallback testuale dei bottoni inline, vedi 8.1) |
-| `/adduser <chat_id>` | Admin | Aggiunge un nuovo `chat_id` alla whitelist |
-| `/removeuser <chat_id>` | Admin | Rimuove un `chat_id` dalla whitelist |
-| `/promoteuser <chat_id>` | Admin | Modifica il flag `admin` di un utente esistente andando a promuovere ad `Admin` |
-| `/resetusers` | Admin | Svuota la whitelist riportardola ai valori di default (operazione distruttiva, da proteggere con conferma) |
+| `/log [n]` | Authorized user | Shows the last n **events** (not rows) from the log, aggregated and formatted per the requester's preferences — see 12.1 |
+| `/status` | Authorized user | Current system status — see 12.2 |
+| `/config` | Authorized user | Shows their own personal configuration (and, if admin, also the global one) |
+| `/setdateformat <format>` | Authorized user | Sets their own date/time display format |
+| `/settimezone <preset>` | Authorized user | Sets their own timezone from a predefined set |
+| `/notify <event_type> on\|off` | Authorized user | Enables/disables the notification for one event type, for themselves |
+| `/setretention <weeks>` | Admin | Sets the global log validity period in weeks |
+| `/setgraceperiod <minutes>` | Admin | Sets the global grace period for notification recovery |
+| `/setretryinterval <minutes>` | Admin | Sets the global scheduled-retry interval |
+| `/setmaxretries <n>` | Admin | Sets the number of attempts beyond which a notification is abandoned |
+| `/setnetthreshold <seconds>` | Admin | Sets the minimum duration of a connectivity outage for it to generate an event |
+| `/setaggregatethreshold <n>` | Admin | Sets the threshold beyond which recovered notifications are grouped into a single message |
+| `/closeevent <id> [timestamp]` | Admin | Manually closes an event left open (text fallback for inline buttons, see 8.1) |
+| `/adduser <chat_id>` | Admin | Adds a new `chat_id` to the whitelist |
+| `/removeuser <chat_id>` | Admin | Removes a `chat_id` from the whitelist |
+| `/promoteuser <chat_id>` | Admin | Changes the `admin` flag of an existing user, promoting them to `Admin` |
+| `/resetusers` | Admin | Empties the whitelist back to default values (destructive operation, to be protected with confirmation) |
 
-### 12.1 Rendering di `/log`
+### 12.1 `/log` rendering
 
-`/log` presenta **eventi aggregati**, non le singole righe del file: le coppie `START`/`END` con lo stesso `id` sono unite in una riga sola con la durata calcolata.
+`/log` presents **aggregated events**, not individual file rows: `START`/`END` pairs sharing the same `id` are merged into a single row with the computed duration. The runtime event path guarantees that a duration `END` reuses the ID of the open `START`; unmatched `END` transitions are not rendered as standalone events.
 
 ```
-Allarme garage      21/08 14:02 → 14:07  (5m)
-Mancanza rete 230V  20/08 03:11 → 03:44  (33m)
-Riavvio             19/08 22:07
-Allarme interno     19/08 08:30 → APERTO
+Garage alarm         21/08 14:02 → 14:07  (5m)
+Mains power loss      20/08 03:11 → 03:44  (33m)
+Reboot                19/08 22:07
+Internal alarm        19/08 08:30 → OPEN
 ```
 
-**Implementazione**: il file viene letto una sola volta in streaming, mantenendo in RAM un **ring buffer degli ultimi N eventi aggregati** (non delle righe). L'occupazione di memoria dipende quindi da `n` richiesto — con un tetto massimo imposto — e non dalla dimensione del file. La riga `END` di un evento aggiorna la voce corrispondente già presente nel buffer; gli eventi ancora aperti sono resi esplicitamente come `APERTO`. I timestamp con flag `a: 1` (sezione 5.4) sono preceduti da `~`.
+**Implementation**: the file is read once, in streaming, keeping in RAM a **ring buffer of the last N aggregated events** (not of rows). Memory usage therefore depends on the requested `n` — with an imposed maximum cap — and not on the file's size. An event's `END` row updates the corresponding entry already present in the buffer; events still open are rendered explicitly as `OPEN`. Timestamps with the `a: 1` flag (section 5.4) are prefixed with `~`.
 
-### 12.2 Contenuto di `/status`
+### 12.2 `/status` content
 
-`/status` è l'unico strumento di verifica dello stato del sistema, data l'assenza di un osservatore esterno (sezione 1.1). Deve riportare:
+`/status` is the only tool for verifying system state, given the absence of an external observer (section 1.1). It must report:
 
-- Uptime dall'ultimo boot e causa dell'ultimo riavvio (`esp_reset_reason()`)
-- Stato corrente di ciascun pin monitorato, con la relativa etichetta di tipo
-- Elenco degli eventi attualmente aperti
-- Stato WiFi: connesso/disconnesso, SSID, RSSI, tentativo di backoff corrente
-- Ultima sincronizzazione NTP riuscita e validità dell'orario corrente (esatto / stimato da ancora)
-- Numero di notifiche `PENDING` e `ABANDONED` per utente; stato del timer di retry
-- Spazio LittleFS usato/totale, contatore errori di filesystem, eventuale modalità degradata
-- Contatore di overflow della coda interrupt (sezione 3.3)
-- Ultimo errore di sistema registrato (es. token non valido, sezione 6.5)
-- Data dell'ultima rotazione eseguita
+- Uptime since last boot and the last reboot's cause (`esp_reset_reason()`)
+- Current state of each monitored pin, with its type label
+- List of currently open events
+- WiFi status: connected/disconnected, SSID, RSSI, current backoff attempt
+- Last successful NTP sync and current time validity (exact / estimated from anchor)
+- Number of `PENDING` and `ABANDONED` notifications per user; retry-timer state
+- LittleFS space used/total, filesystem error counter, degraded mode if any
+- Interrupt queue overflow counter (section 3.3)
+- Last system error logged (e.g. invalid token, section 6.5)
+- Date of the last rotation performed
 
 ---
 
-## 13. Considerazioni di robustezza
+## 13. Robustness considerations
 
-- **Isolamento galvanico**: non necessario. Le uscite PGM sono utilizzate in configurazione a relè (contatto pulito), meccanicamente isolato dal circuito della centralina — nessun optoisolatore richiesto (sezione 2.1).
-- **Perdita di transizioni durante l'I/O di rete**: risolta strutturalmente da ISR + coda + datazione retroattiva (sezione 3.3); nessuna transizione può essere persa a causa di un blocco del loop.
-- **Watchdog**: il Task WDT è abilitato sul loop applicativo (timeout 30 s, superiore ai timeout di rete di 10 s). Un blocco genuino provoca un riavvio, che genera a sua volta un evento `REBOOT` notificato — rendendo visibile un guasto che altrimenti sarebbe silenzioso.
-- **Sincronizzazione oraria**: l'ESP32 non dispone di RTC con batteria tampone; l'orario viene ottenuto via NTP alla connessione e periodicamente, in UTC. In assenza di NTP il sistema usa l'ancora oraria persistita in NVS e marca i timestamp come approssimati (sezione 5.4). La conversione in ora locale (con gestione automatica DST) avviene solo in fase di presentazione, secondo il fuso di ciascun utente.
-- **Monotonicità dei timestamp**: garantita da clamp sull'ultimo valore scritto (sezione 5.4.3), presupposto necessario per rotazione, ordinamento e calcolo delle durate.
-- **Alimentazione**: garantita dalla batteria tampone della centralina; i riavvii per interruzione elettrica sono previsti come rari, a differenza delle interruzioni di sola connettività di rete.
-- **Singolo punto di guasto (connettività)**: se la connessione di rete cade, le notifiche in tempo reale non sono possibili; il meccanismo di recupero (grace period + retry programmato) mitiga la perdita di notifiche, ma non elimina il ritardo nella loro consegna oltre le soglie configurate.
-- **Guasto totale non rilevabile automaticamente**: per scelta esplicita (sezione 1.1) non esiste heartbeat né osservatore esterno. Un guasto hardware totale (alimentazione, dispositivo bruciato) non genera alcuna segnalazione: la verifica è a carico dell'utente tramite `/status`. È il limite consapevolmente accettato dell'architettura autonoma.
-- **Integrità dei dati**: il pattern write-then-rename per la rotazione e per i file di configurazione/whitelist, unito all'approccio append-only per la scrittura ordinaria del log, minimizza il rischio di corruzione in caso di interruzione di alimentazione. L'ordine di commit della rotazione (sezione 9.3.2) è vincolante.
-- **Spazio ed errori di filesystem**: sorvegliati attivamente con soglie e modalità degradata (sezione 9.4); nessun fallimento di scrittura resta silenzioso.
-- **Fallimenti permanenti di invio**: distinti dai transitori tramite la classificazione delle risposte API (sezione 6.5), per evitare retry perpetui verso destinatari irraggiungibili.
-- **Rate limiting**: gli invii sono serializzati con intervallo minimo e il `429` è gestito rispettando `retry_after` (sezione 6.6), così una raffica di recupero non si trasforma in un ciclo di errori.
-- **Sicurezza dei trasporti**: la connessione TLS verso `api.telegram.org` usa `setInsecure()`, senza validazione del certificato del server. Scelta consapevole: evita il guasto silenzioso e difficilmente diagnosticabile che si verifica quando un root CA fissato nel firmware scade o viene ruotato da Telegram, situazione in cui il bot smetterebbe di funzionare **proprio senza poter notificare il problema**. L'esposizione residua è a un attacco man-in-the-middle sulla rete locale, considerato fuori dal modello di minaccia di un impianto domestico.
-- **Sicurezza degli accessi**: nessuna risposta viene inviata a `chat_id` non presenti in whitelist. Le notifiche sono inviate esclusivamente ai `chat_id` autorizzati, e solo per eventi successivi alla loro aggiunta (vedi 4.6). L'autorizzazione è rivalutata anche sulle callback query dei bottoni inline (sezione 8.1).
-- **Segreti**: token e credenziali in `secrets.h` non versionato, in chiaro nella flash; modello di minaccia e mitigazione documentati in sezione 4.7.
-- **Usura della flash**: il volume di scrittura atteso per il log eventi (eventi rari) e per il registro notifiche (scritture solo sui fallimenti, con la Proposta E adottata) è ampiamente compatibile con la durata della memoria flash interna. L'ancora oraria in NVS aggiunge 144 scritture al giorno di un singolo valore scalare, assorbite dal wear-leveling (sezione 5.4.1).
-- **Compattezza dello storage**: l'uso di enum numerici per `type`/`status`/`state` e di UUID in formato esadecimale compatto (32 caratteri) riduce la dimensione media di ogni riga. Si tenga però presente che, con 16 MB disponibili e il volume di eventi atteso, **lo storage non è un vincolo di progetto**: le decisioni future vanno prese privilegiando leggibilità, diagnosticabilità e usabilità rispetto al risparmio di byte.
+- **Galvanic isolation**: not necessary. The PGM outputs are used in relay configuration (dry contact), mechanically isolated from the panel's circuitry — no optoisolator required (section 2.1).
+- **Loss of transitions during network I/O**: structurally solved by ISR + queue + retroactive dating (section 3.3); no transition can be lost due to a loop block.
+- **Watchdog**: the Task WDT is enabled on the application loop (30 s timeout, above the 10 s network timeouts). A genuine block triggers a reboot, which in turn generates a notified `REBOOT` event — making a failure visible that would otherwise be silent.
+- **Time synchronization**: the ESP32 has no battery-backed RTC; time is obtained via NTP on connection and periodically, in UTC. In the absence of NTP the system uses the time anchor persisted in NVS and marks timestamps as approximate (section 5.4). Conversion to local time (with automatic DST handling) happens only at presentation time, per each user's timezone.
+- **Timestamp monotonicity**: guaranteed by a clamp on the last value written (section 5.4.3), a necessary precondition for rotation, ordering, and duration calculation.
+- **Power**: guaranteed by the panel's backup battery; reboots due to power interruption are expected to be rare, unlike connectivity-only interruptions.
+- **Single point of failure (connectivity)**: if the network connection drops, real-time notifications aren't possible; the recovery mechanism (grace period + scheduled retry) mitigates notification loss, but doesn't eliminate the delay in their delivery beyond the configured thresholds.
+- **Total failure not automatically detectable**: by explicit choice (section 1.1) there's no heartbeat or external observer. A total hardware failure (power, a burned-out device) generates no alert: verification is up to the user via `/status`. This is the consciously accepted limit of the autonomous architecture.
+- **Data integrity**: the write-then-rename pattern for rotation and for configuration/whitelist files, combined with the append-only approach for ordinary log writing, minimizes the risk of corruption on a power interruption. The rotation commit order (section 9.3.2) is binding.
+- **Filesystem space and errors**: actively monitored with thresholds and a degraded mode (section 9.4); no write failure stays silent.
+- **Permanent send failures**: distinguished from transient ones via API response classification (section 6.5), to avoid perpetual retries toward unreachable recipients.
+- **Rate limiting**: sends are serialized with a minimum interval and `429` is handled by honoring `retry_after` (section 6.6), so a recovery burst doesn't turn into an error loop.
+- **Transport security**: the TLS connection to `api.telegram.org` uses `setInsecure()`, with no server certificate validation. A conscious choice: it avoids the silent, hard-to-diagnose failure that occurs when a root CA pinned in the firmware expires or is rotated by Telegram, a situation in which the bot would stop working **precisely without being able to notify anyone of the problem**. The residual exposure is to a man-in-the-middle attack on the local network, considered outside the threat model of a home installation.
+- **Access security**: no response is ever sent to a `chat_id` not present on the whitelist. Notifications are sent exclusively to authorized `chat_id`s, and only for events following their addition (see 4.6). Authorization is also re-evaluated on inline-button callback queries (section 8.1).
+- **Secrets**: token and credentials in an unversioned `secrets.h`, in plaintext in flash; threat model and mitigation documented in section 4.7.
+- **Flash wear**: the expected write volume for the event log (rare events) and for the notification log (writes only on failures, with the adopted Proposal E) is amply compatible with the internal flash memory's lifespan. The NVS time anchor adds 144 writes per day of a single scalar value, absorbed by wear-leveling (section 5.4.1).
+- **Storage compactness**: the use of numeric enums for `type`/`status`/`state` and of a compact hexadecimal UUID format (32 characters) reduces the average size of each row. Note, however, that with 16 MB available and the expected event volume, **storage is not a design constraint**: future decisions should be made favoring readability, diagnosability, and usability over byte savings.
 
 ---
 
-## 14. Decisioni di design registrate
+## 14. Recorded design decisions
 
-| Argomento | Decisione |
+| Topic | Decision |
 |---|---|
-| Dipendenze esterne | Nessuna: dispositivo autonomo, comunicazione diretta con Telegram, per accorciare la catena di guasto |
-| Interfacciamento PGM | Uscite a relè (contatto pulito NA/NC) su tutte le zone; nessun isolamento aggiuntivo necessario; preferire contatti NA sugli eventuali strapping pin dell'ESP32-S3 |
-| Modello di concorrenza | ISR `IRAM_ATTR` + coda FreeRTOS + debounce e datazione retroattiva nel loop; accesso a LittleFS solo dal loop (nessun mutex necessario) |
-| Struttura del log eventi | JSON Lines, append-only, contiene solo il rilevamento (`START`/`END`/`INSTANT`), non le notifiche |
-| Eventi istantanei (es. REBOOT) | Valore enum dedicato per `INSTANT` |
-| Eventi di rete | Tipo unico `NETWORK_ISSUE` con `START`/`END` nel log, ma **notifica del solo `END`** con durata del down nel testo |
-| Soglia problema di rete | Assenza di connettività verso le API Telegram (non solo WiFi) per più di 120 s (configurabile) |
-| Riconnessione WiFi | Backoff esponenziale 5→300 s non bloccante, reset alla riconnessione |
-| Tipologie di allarme | Zone distinte come tipi separati: `ALARM_GENERAL`, `ALARM_INTERNAL`, `ALARM_GARAGE`, ciascuno con proprio pin/PGM dedicato |
-| Sovrapposizione `ALARM_GENERAL`/zone | Duplicazione accettata; mitigata da abilitazione per tipo, sia per utente (`/notify`) sia globale (flag `enabled`) |
-| Interruzione di corrente | Tipo `POWER_LOSS`, evento con durata (`START`/`END`), rilevato tramite PGM "guasto rete" della centralina |
-| Ottimizzazione storage | `type`, `status` (e `state` per le notifiche) come enum numerici invece di stringhe testuali; lo storage non è comunque un vincolo di progetto |
-| Formato id evento | UUID v4 in esadecimale senza trattini, 32 caratteri (invariato) |
-| Chiusura eventi aperti | **Bottoni inline** (FastBot2 `InlineKeyboard`, costruita dinamicamente) nel messaggio di riepilogo agli admin (`callback_data` `c:<id>`), con `/closeevent` come fallback testuale |
-| Timestamp senza NTP | Ancora oraria in NVS salvata ogni 10 min; ricostruzione `last_epoch + millis()`; flag `a: 1` sulle righe approssimate |
-| Monotonicità timestamp | Clamp su `last_written_ts`, inizializzato al boot dall'ultima riga del log |
-| Versione di schema | Intero in NVS (`schema_ver`), verificato al boot; downgrade → modalità degradata senza toccare i dati |
-| Storage delle notifiche | **Proposta E adottata**: log inverso, un file per chat (`notif_<chat_id>.jsonl`); proposte A-D e F scartate ma documentate in 7.3 |
-| Semantica del tracciamento notifiche | Traccia l'accettazione da parte delle API Telegram, non la ricezione o lettura da parte dell'utente |
-| Client Telegram | **FastBot2** (non UniversalTelegramBot): `sendMessage()` ritorna un `fb::Result` con accesso diretto a `error_code`/`description`/`retry_after`, nessun wrapper necessario per la classificazione di sezione 6.5 |
-| Modalità di polling Telegram | `Long` (long polling asincrono, timeout 60 s); invio fuori dal gestore `onUpdate` può incorrere in ~1 s di blocco per riconnessione, coperto dall'architettura ISR + coda di 3.3 |
-| Libreria JSON | ArduinoJson per tutti i file del progetto (invariato); GSON usata solo internamente da FastBot2 per il parsing delle risposte Telegram — due librerie indipendenti, coesistenza per scelta |
-| Esiti di invio | Classificati in successo / transitorio / throttling / permanente-destinatario / errore di sistema; retry solo sui transitori; ottenuti da `fb::Result` senza wrapper |
-| Stato terminale delle notifiche | `ABANDONED` su errore permanente o superamento di `max_retries` (default 24), con contatore `n` nel record |
-| Rate limiting | Intervallo minimo di 1100 ms tra invii; `429` rispettato con `retry_after` e fino a 3 ritentativi immediati |
-| Aggregazione notifiche recuperate | Sopra soglia configurabile (default 3, per utente per scansione) le notifiche pendenti vengono raggruppate in un unico messaggio invece di N separati |
-| Notifiche recuperate entro il grace period (5 min default) | Inviate come notifiche normali, senza prefisso di "recupero" |
-| Notifiche recuperate oltre il grace period | Inviate con prefisso esplicito e timestamp originale; sempre con prefisso se il timestamp è approssimato |
-| Recupero non riuscito | Timer di retry programmato (default 60 min): reset su fallimento transitorio; successo di un invio nel flusso normale scatena una scansione anticipata, protetta da `scan_in_progress` contro la rientranza |
-| Eventi aperti dopo riavvio | Non chiusi automaticamente, segnalati via Telegram, chiudibili con bottone inline (solo admin) |
-| Eventi/notifiche pendenti oltre il periodo di retention | Sempre esclusi dalla cancellazione automatica |
-| Cadenza rotazione | Settimanale, unità di retention in settimane, applicata sia al log eventi sia ai file notifiche per-chat |
-| Rotazione: RAM | Due passate con insieme di id limitato a 256 (16 byte ciascuno, ~4 KB), ripetute finché necessario |
-| Rotazione: commit | Rename atomico prima, aggiornamento NVS dopo; file temporanei residui puliti al boot |
-| Filesystem pieno / errori | Soglie 80% (rotazione anticipata) e 95% (modalità degradata); verifica dei byte scritti; contatore errori in `/status` |
-| Generazione id evento | UUID casuale via hardware RNG, nessun contatore NVS necessario |
-| Controllo accessi | Whitelist di `chat_id` in `users.json`, nessuna risposta a mittenti non autorizzati, rivalutata sulle callback query |
-| Tipo dei `chat_id` | `int64_t` ovunque (gruppi/supergruppi eccedono i 32 bit) |
-| Permessi | Singolo flag booleano `admin` (no permessi granulari per ora) |
-| Onboarding iniziale | `chat_id` iniziale in `secrets.h`, promosso automaticamente ad admin al primo avvio |
-| Gestione whitelist | Comandi dedicati: `/adduser`, `/removeuser`, `/promoteuser`, `/resetusers` |
-| Segreti | File `secrets.h` separato, in chiaro, non versionato (con `secrets.h.example` versionato) |
-| TLS | `setInsecure()`, per evitare il guasto silenzioso da rotazione del certificato |
-| Monitoraggio dello stato | Nessun heartbeat automatico; verifica manuale tramite `/status` |
-| Configurazioni globali | NVS (retention, grace period, retry interval, max retries, soglia di rete) |
-| Configurazioni per utente | File JSON su LittleFS (`userconfig.json`): formato data, timezone, tipi evento notificati |
-| Rendering `/log` | Eventi aggregati con durata (`14:02 → 14:07, 5m`), ring buffer degli ultimi N eventi |
-| Timezone | Set di preset predefiniti mappati a stringhe TZ POSIX (UTC, Europe/Rome, Europe/Berlin, Europe/London, Europe/Moscow, America/New_York, America/Los_Angeles), gestione DST automatica, default UTC, preferenza per singolo utente |
-| Alimentazione | Fornita dalla centralina (con batteria tampone): riavvii per blackout rari, interruzioni di rete più probabili |
+| External dependencies | None: autonomous device, direct communication with Telegram, to shorten the failure chain |
+| PGM interfacing | Relay outputs (dry NA/NC contact) on all zones; no additional isolation needed; prefer NA contacts on any ESP32-S3 strapping pins |
+| Concurrency model | ISR `IRAM_ATTR` + FreeRTOS queue + debounce and retroactive dating in the loop; LittleFS access only from the loop (no mutex needed) |
+| Event log structure | JSON Lines, append-only, contains only detection (`START`/`END`/`INSTANT`), not notifications |
+| Instant events (e.g. REBOOT) | Dedicated enum value for `INSTANT` |
+| Network events | Single `NETWORK_ISSUE` type with `START`/`END` in the log, but **only `END` notified**, with the outage duration in the text |
+| Network-issue threshold | Absence of connectivity to the Telegram API (not just WiFi) for more than 120 s (configurable) |
+| WiFi reconnection | Non-blocking exponential backoff 5→300 s, reset on reconnection |
+| Alarm types | Distinct zones as separate types: `ALARM_GENERAL`, `ALARM_INTERNAL`, `ALARM_GARAGE`, each with its own dedicated pin/PGM |
+| `ALARM_GENERAL`/zone overlap | Duplication accepted; mitigated by per-type enablement, both per-user (`/notify`) and global (`enabled` flag) |
+| Power outage | `POWER_LOSS` type, an event with duration (`START`/`END`), detected via the panel's "mains fault" PGM |
+| Storage optimization | `type`, `status` (and `state` for notifications) as numeric enums instead of text strings; storage is nonetheless not a design constraint |
+| Event id format | v4 UUID in hex without dashes, 32 characters (unchanged) |
+| Closing open events | **Inline buttons** (FastBot2 `InlineKeyboard`, built dynamically) in the admin summary message (`callback_data` `c:<id>`), with `/closeevent` as a text fallback |
+| Timestamp without NTP | NVS time anchor saved every 10 min; reconstruction via `last_epoch + millis()`; `a: 1` flag on approximate rows |
+| Timestamp monotonicity | Clamp on `last_written_ts`, initialized at boot from the log's last row |
+| Schema version | Integer in NVS (`schema_ver`), checked at boot; downgrade → degraded mode without touching data |
+| Notification storage | **Proposal E adopted**: inverse log, one file per chat (`notif_<chat_id>.jsonl`); proposals A-D and F rejected but documented in 7.3 |
+| Notification-tracking semantics | Tracks acceptance by the Telegram API, not receipt or reading by the user |
+| Telegram client | **FastBot2** (not UniversalTelegramBot): `sendMessage()` returns an `fb::Result` with direct access to `error_code`/`description`/`retry_after`, no wrapper needed for the classification in section 6.5 |
+| Telegram polling mode | `Long` (asynchronous long polling, 60 s timeout); a send issued outside the `onUpdate` handler can incur ~1 s of reconnection blocking, covered by the ISR + queue architecture from 3.3 |
+| JSON library | ArduinoJson for every project file (unchanged); GSON used only internally by FastBot2 to parse Telegram responses — two independent libraries, coexistence by choice |
+| Send outcomes | Classified as success / transient / throttling / permanent-recipient / system error; retry only on transient ones; obtained from `fb::Result` with no wrapper |
+| Notification terminal state | `ABANDONED` on permanent error or `max_retries` exceeded (default 24), with an `n` counter in the record |
+| Rate limiting | Minimum 1100 ms interval between sends; `429` honored via `retry_after` and up to 3 immediate retries |
+| Recovered-notification aggregation | Above a configurable threshold (default 3, per user per scan) pending notifications are grouped into a single message instead of N separate ones |
+| Notifications recovered within the grace period (5 min default) | Sent as normal notifications, with no "recovery" prefix |
+| Notifications recovered beyond the grace period | Sent with an explicit prefix and the original timestamp; always with the prefix if the timestamp is approximate |
+| Unsuccessful recovery | Scheduled retry timer (default 60 min): reset on transient failure; a successful send in the normal flow triggers an early scan, protected against reentrancy by `scan_in_progress` |
+| Open events after reboot | Not automatically closed, flagged via Telegram, closable with an inline button (admin only) |
+| Events/notifications pending beyond the retention period | Always excluded from automatic deletion |
+| Rotation cadence | Weekly, retention unit in weeks, applied to both the event log and the per-chat notification files |
+| Rotation: RAM | Two passes with an id set capped at 256 (16 bytes each, ~4 KB), repeated as needed |
+| Rotation: commit | Atomic rename first, NVS update after; leftover temp files cleaned up at boot |
+| Filesystem full / errors | Thresholds at 80% (early rotation) and 95% (degraded mode); bytes-written check; error counter in `/status` |
+| Event id generation | Random UUID via hardware RNG, no NVS counter needed |
+| Access control | `chat_id` whitelist in `users.json`, no response to unauthorized senders, re-evaluated on callback queries |
+| `chat_id` type | `int64_t` everywhere (groups/supergroups exceed 32 bits) |
+| Permissions | Single boolean `admin` flag (no granular permissions for now) |
+| Initial onboarding | Initial `chat_id` in `secrets.h`, automatically promoted to admin on first boot |
+| Whitelist management | Dedicated commands: `/adduser`, `/removeuser`, `/promoteuser`, `/resetusers` |
+| Secrets | Separate `secrets.h` file, in plaintext, unversioned (with a versioned `secrets.h.example`) |
+| TLS | `setInsecure()`, to avoid the silent failure from certificate rotation |
+| Status monitoring | No automatic heartbeat; manual verification via `/status` |
+| Global configuration | NVS (retention, grace period, retry interval, max retries, network threshold) |
+| Per-user configuration | JSON file on LittleFS (`userconfig.json`): date format, timezone, notified event types |
+| `/log` rendering | Aggregated events with duration (`14:02 → 14:07, 5m`), ring buffer of the last N events |
+| Timezone | Set of predefined presets mapped to POSIX TZ strings (UTC, Europe/Rome, Europe/Berlin, Europe/London, Europe/Moscow, America/New_York, America/Los_Angeles), automatic DST handling, default UTC, per-user preference |
+| Power | Supplied by the panel (with backup battery): blackout reboots rare, network interruptions more likely |
 
 ---
 
-## 15. Prossimi passi
+## 15. Next steps
 
-- Valutare (facoltativo, discusso separatamente) l'introduzione di comandi per inserire/disinserire l'allarme da remoto — richiede verifica di supporto hardware sulla centralina e un'attenta analisi di sicurezza aggiuntiva prima di essere formalizzato nel documento.
-- Implementazione dello sketch Arduino completo.
+- Evaluate (optional, discussed separately) introducing commands to arm/disarm the alarm remotely — requires verifying hardware support on the panel and a careful additional security analysis before being formalized in this document.
+- Implementation of the complete Arduino sketch.

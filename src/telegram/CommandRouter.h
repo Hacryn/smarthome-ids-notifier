@@ -7,17 +7,17 @@
 #include "../users/UserList.h"
 #include "TelegramClient.h"
 
-// Sez. 12 - dispatcher dei comandi Telegram. Non testabile via harness
-// host-side (orchestrazione hardware-bound); il parsing dei singoli
-// comandi (CommandParser) e' testato separatamente.
+// Sec. 12 - Telegram command dispatcher. Not testable via the host-side
+// harness (hardware-bound orchestration); parsing of individual commands
+// (CommandParser) is tested separately.
 
-// Registra i riferimenti allo stato di sistema necessari all'esecuzione dei
-// comandi. Da chiamare una sola volta in setup(), prima di registrare
-// handleIncomingCommand come CommandHandler.
+// Registers the references to the system state needed to execute
+// commands. Call once in setup(), before registering handleIncomingCommand
+// as the CommandHandler.
 void initCommandRouter(std::vector<AuthorizedUser>& users, uint32_t& lastWrittenTs);
 
-// Sez. 4.2/12 - whitelist verificata qui (i mittenti non autorizzati
-// vengono ignorati silenziosamente); i comandi riservati agli admin
-// vengono rifiutati esplicitamente se il mittente e' autorizzato ma non
-// admin. Firma compatibile con CommandHandler, registrabile direttamente.
+// Sec. 4.2/12 - whitelist checked here (unauthorized senders are silently
+// ignored); admin-only commands are explicitly rejected if the sender is
+// authorized but not an admin. Signature compatible with CommandHandler,
+// directly registerable.
 void handleIncomingCommand(const IncomingCommand& cmd);

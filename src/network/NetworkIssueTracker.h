@@ -2,27 +2,27 @@
 
 #include <stdint.h>
 
-// Sez. 3.4.1 - macchina a stati pura per la rilevazione di NETWORK_ISSUE.
-// Riceve un segnale generico di raggiungibilita' (nella fase attuale: solo
-// lo stato WiFi; la sez. 3.4.1 richiede anche la raggiungibilita' delle API
-// Telegram, che verra' combinata qui una volta introdotto il client - fase 6).
+// Sec. 3.4.1 - pure state machine for NETWORK_ISSUE detection. Receives a
+// generic reachability signal (currently: WiFi status only; sec. 3.4.1
+// also requires Telegram API reachability, which will be combined here
+// once the client is introduced - phase 6).
 struct NetworkIssueEvent {
   enum class Kind { NONE, STARTED, ENDED } kind = Kind::NONE;
-  uint32_t ts = 0;              // istante del rilevamento (START) o del ripristino (END)
-  uint32_t downDurationSec = 0;  // valorizzato solo per ENDED
+  uint32_t ts = 0;              // detection instant (START) or restoration instant (END)
+  uint32_t downDurationSec = 0;  // set only for ENDED
 };
 
 class NetworkIssueTracker {
  public:
-  // Da chiamare periodicamente. epochNow e' la stima corrente dell'epoch,
-  // usata per datare lo START (al momento in cui la irraggiungibilita' e'
-  // iniziata, non a quando la soglia viene superata) e l'END.
+  // To be called periodically. epochNow is the current epoch estimate,
+  // used to date the START (at the moment unreachability began, not when
+  // the threshold is crossed) and the END.
   NetworkIssueEvent update(bool reachable, uint32_t nowMillis, uint32_t epochNow,
                             uint32_t thresholdSec);
 
  private:
   bool unreachable_ = false;
-  bool confirmed_ = false;  // soglia gia' superata, START gia' emesso
+  bool confirmed_ = false;  // threshold already crossed, START already emitted
   uint32_t unreachableSinceMillis_ = 0;
   uint32_t unreachableSinceEpoch_ = 0;
 };

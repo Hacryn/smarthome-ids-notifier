@@ -8,7 +8,7 @@
 
 namespace {
 
-constexpr size_t kQueueDepth = 32;  // sez. 3.3 punto 2
+constexpr size_t kQueueDepth = 32;  // sec. 3.3 point 2
 
 QueueHandle_t g_queue = nullptr;
 volatile uint32_t g_overflowCount = 0;
@@ -21,8 +21,8 @@ struct MonitoredPin {
 MonitoredPin g_monitoredPins[EVENT_TYPES_COUNT];
 size_t g_monitoredCount = 0;
 
-// Sez. 3.3 punto 1 - la ISR fa una sola cosa: accodare il record. Nessuna
-// allocazione, nessun I/O, nessuna chiamata bloccante.
+// Sec. 3.3 point 1 - the ISR does exactly one thing: enqueue the record.
+// No allocation, no I/O, no blocking call.
 void IRAM_ATTR isrHandler(void* arg) {
   MonitoredPin* mp = static_cast<MonitoredPin*>(arg);
 

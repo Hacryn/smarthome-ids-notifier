@@ -12,7 +12,7 @@ NetworkIssueEvent NetworkIssueTracker::update(bool reachable, uint32_t nowMillis
       confirmed_ = false;
       return ev;
     }
-    // Sez. 3.4.1 - un blip rientrato prima della soglia non genera alcun evento.
+    // Sec. 3.4.1 - a blip that recovers before the threshold generates no event.
     unreachable_ = false;
     return {};
   }
@@ -28,7 +28,7 @@ NetworkIssueEvent NetworkIssueTracker::update(bool reachable, uint32_t nowMillis
     confirmed_ = true;
     NetworkIssueEvent ev;
     ev.kind = NetworkIssueEvent::Kind::STARTED;
-    ev.ts = unreachableSinceEpoch_;  // sez. 3.2.3 - istante esatto di inizio del down
+    ev.ts = unreachableSinceEpoch_;  // sec. 3.2.3 - exact instant the outage began
     return ev;
   }
 

@@ -6,10 +6,10 @@
 
 #include "NotificationRecord.h"
 
-// Sez. 7.2 - applica in ordine le righe del file: l'ultima riga per
-// ciascuna coppia (id, status) e' quella valida.
+// Sec. 7.2 - applies the file's rows in order: the last row for each
+// (id, status) pair is the valid one.
 std::map<std::string, NotificationRecord> foldNotificationRecords(
     const std::vector<NotificationRecord>& rows);
 
-// Sottoinsieme delle voci ancora PENDING (quelle da recuperare, sez. 6.2).
+// Subset of entries still PENDING (the ones to recover, sec. 6.2).
 std::vector<NotificationRecord> pendingFrom(const std::map<std::string, NotificationRecord>& latest);

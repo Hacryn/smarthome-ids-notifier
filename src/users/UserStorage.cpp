@@ -36,13 +36,13 @@ bool saveUsers(const std::vector<AuthorizedUser>& users) {
   std::string json = serializeUsers(users);
 
   bool written = writeUsersTmp(json);
-  if (!written) written = writeUsersTmp(json);  // sez. 9.4 - un solo retry
+  if (!written) written = writeUsersTmp(json);  // sec. 9.4 - a single retry
   if (!written) {
     fsErrorCounter().recordFailure();
     return false;
   }
 
-  // Sez. 9.3.2 - rinomina atomica sopra il file esistente, non un
-  // remove()+rename() separati (che non sarebbero atomici).
+  // Sec. 9.3.2 - atomic rename over the existing file, not a separate
+  // remove()+rename() (which wouldn't be atomic).
   return LittleFS.rename(kUsersTmpPath, kUsersPath);
 }

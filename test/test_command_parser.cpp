@@ -8,10 +8,10 @@ static void test_single_uint_command() {
   assert(parseSingleUintCommand("/setretention 52", "/setretention", value));
   assert(value == 52);
 
-  assert(!parseSingleUintCommand("/setgraceperiod 5", "/setretention", value));  // comando diverso
-  assert(!parseSingleUintCommand("/setretention -5", "/setretention", value));   // negativo non ammesso
+  assert(!parseSingleUintCommand("/setgraceperiod 5", "/setretention", value));  // different command
+  assert(!parseSingleUintCommand("/setretention -5", "/setretention", value));   // negative not allowed
   assert(!parseSingleUintCommand("/setretention abc", "/setretention", value));
-  assert(!parseSingleUintCommand("/setretention", "/setretention", value));  // manca l'argomento
+  assert(!parseSingleUintCommand("/setretention", "/setretention", value));  // missing argument
 }
 
 static void test_single_int64_command() {
@@ -19,7 +19,7 @@ static void test_single_int64_command() {
   assert(parseSingleInt64Command("/adduser 111111111", "/adduser", value));
   assert(value == 111111111LL);
 
-  assert(parseSingleInt64Command("/adduser -1001234567890", "/adduser", value));  // gruppo
+  assert(parseSingleInt64Command("/adduser -1001234567890", "/adduser", value));  // group
   assert(value == -1001234567890LL);
 
   assert(!parseSingleInt64Command("/adduser -", "/adduser", value));
@@ -29,7 +29,7 @@ static void test_single_int64_command() {
 static void test_reset_users_requires_confirmation_word() {
   assert(parseResetUsersCommand("/resetusers CONFERMA"));
   assert(!parseResetUsersCommand("/resetusers"));
-  assert(!parseResetUsersCommand("/resetusers conferma"));  // case-sensitive
+  assert(!parseResetUsersCommand("/resetusers conferma"));  // case-sensitive (Italian word by design)
 }
 
 static void test_notify_command() {
@@ -51,7 +51,7 @@ static void test_set_date_format_command() {
   assert(parseSetDateFormatCommand("/setdateformat %d/%m/%Y %H:%M", format));
   assert(format == "%d/%m/%Y %H:%M");
 
-  assert(!parseSetDateFormatCommand("/setdateformat ", format));  // vuoto dopo il comando
+  assert(!parseSetDateFormatCommand("/setdateformat ", format));  // empty after the command
   assert(!parseSetDateFormatCommand("/settimezone UTC", format));
 }
 
@@ -86,6 +86,6 @@ int main() {
   test_set_timezone_command();
   test_log_command();
 
-  printf("test_command_parser: tutti i test superati\n");
+  printf("test_command_parser: all tests passed\n");
   return 0;
 }

@@ -4,16 +4,16 @@
 
 #include <string>
 
-// Sez. 3.4.2 - connessione WiFi con backoff esponenziale non bloccante.
-// Non testabile via harness host-side (dipende dalla libreria WiFi dell'ESP32).
+// Sec. 3.4.2 - WiFi connection with non-blocking exponential backoff. Not
+// testable via the host-side harness (depends on the ESP32 WiFi library).
 void initWifi(const char* ssid, const char* password);
 
-// Da chiamare ad ogni ciclo di loop().
+// To be called on every loop() cycle.
 void tickWifi(uint32_t nowMillis);
 
 bool isWifiConnected();
 
-// Sez. 12.2 - stato esposto in /status.
+// Sec. 12.2 - state exposed in /status.
 std::string wifiSsid();
 int wifiRssi();
 uint32_t wifiCurrentBackoffAttempt();

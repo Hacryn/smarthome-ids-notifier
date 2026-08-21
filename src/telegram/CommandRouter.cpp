@@ -20,6 +20,7 @@
 #include "../notifications/NotificationFolder.h"
 #include "../notifications/NotificationLogStorage.h"
 #include "../pins/PinMonitor.h"
+#include "../rotation/FilesystemHealth.h"
 #include "../rotation/FsErrorCounter.h"
 #include "../rotation/RotationEngine.h"
 #include "../rotation/RotationStorage.h"
@@ -46,8 +47,8 @@ void upsertUserConfig(std::vector<UserConfig>& configs, const UserConfig& update
   configs.push_back(updated);
 }
 
-// Sez. 11.2 - carica, applica la modifica, salva. Condiviso da
-// /notify, /setdateformat, /settimezone.
+// Sec. 11.2 - load, apply the change, save. Shared by /notify,
+// /setdateformat, /settimezone.
 template <typename Mutator>
 void modifyUserConfig(int64_t chatId, Mutator mutate) {
   std::vector<UserConfig> configs;
@@ -79,9 +80,9 @@ const char* resetReasonText(esp_reset_reason_t reason) {
   }
 }
 
-// Sez. 4.3 - i comandi admin ignorano silenziosamente solo i mittenti non
-// autorizzati (gia' filtrato a monte); un utente autorizzato ma non admin
-// riceve un rifiuto esplicito.
+// Sec. 4.3 - admin commands silently ignore only unauthorized senders
+// (already filtered upstream); a user who's authorized but not an admin
+// gets an explicit rejection.
 bool requireAdmin(int64_t chatId, bool admin) {
   if (!admin) reply(chatId, "Comando riservato agli admin.");
   return admin;
@@ -165,7 +166,7 @@ void handleSetGlobalUint(int64_t chatId, bool admin, uint32_t GlobalConfig::*fie
 
 void handleLog(int64_t chatId, bool hasArg, uint32_t n) {
   constexpr uint32_t kDefaultLogEntries = 10;
-  constexpr uint32_t kMaxLogEntries = 50;  // sez. 12.1 - tetto massimo imposto
+  constexpr uint32_t kMaxLogEntries = 50;  // sec. 12.1 - imposed hard cap
 
   uint32_t count = hasArg ? n : kDefaultLogEntries;
   if (count == 0) count = 1;
@@ -268,6 +269,9 @@ void handleStatus(int64_t chatId) {
           " byte, errori di scrittura: " + std::to_string(fsErrorCounter().count());
   if (isFilesystemDegraded()) text += " (MODALITA' DEGRADATA)";
   text += "\n";
+  text += "Diagnostica LittleFS: ";
+  text += filesystemHealthText();
+  text += "\n";
 
   text += "Overflow coda interrupt pin: " + std::to_string(pinQueueOverflowCount()) + "\n";
 
@@ -325,7 +329,7 @@ void initCommandRouter(std::vector<AuthorizedUser>& users, uint32_t& lastWritten
 }
 
 void handleIncomingCommand(const IncomingCommand& cmd) {
-  if (g_users == nullptr || !isAuthorized(*g_users, cmd.chatId)) return;  // sez. 4.2
+  if (g_users == nullptr || !isAuthorized(*g_users, cmd.chatId)) return;  // sec. 4.2
 
   bool admin = isAdmin(*g_users, cmd.chatId);
 
@@ -375,5 +379,5 @@ void handleIncomingCommand(const IncomingCommand& cmd) {
   } else if (cmd.text == "/config") {
     handleConfig(cmd.chatId, admin);
   }
-  // Comando non riconosciuto: nessuna risposta (evita rumore su testo libero).
+  // Unrecognized command: no reply (avoids noise on free-form text).
 }

@@ -34,7 +34,7 @@ static void test_hex_id_to_binary_rejects_invalid_chars() {
 static void test_collector_ignores_rows_after_cutoff() {
   DeletableIdCollector c(/*cutoff=*/1000);
   EventRecord rec{};
-  setRec(rec, "a1b2c3d4e5f60718293a4b5c6d7e8f90", EventStatus::END, 2000);  // dopo il cutoff
+  setRec(rec, "a1b2c3d4e5f60718293a4b5c6d7e8f90", EventStatus::END, 2000);  // after the cutoff
   c.observe(rec);
   assert(c.ids().empty());
 }
@@ -44,7 +44,7 @@ static void test_collector_ignores_start_rows() {
   EventRecord rec{};
   setRec(rec, "a1b2c3d4e5f60718293a4b5c6d7e8f90", EventStatus::START, 500);
   c.observe(rec);
-  assert(c.ids().empty());  // solo END/INSTANT rendono un id eliminabile
+  assert(c.ids().empty());  // only END/INSTANT make an id deletable
 }
 
 static void test_collector_collects_end_and_instant_before_cutoff() {
@@ -85,6 +85,6 @@ int main() {
   test_collector_collects_end_and_instant_before_cutoff();
   test_collector_stops_at_cap();
 
-  printf("test_rotation_collector: tutti i test superati\n");
+  printf("test_rotation_collector: all tests passed\n");
   return 0;
 }

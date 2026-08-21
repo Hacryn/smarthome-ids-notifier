@@ -2,31 +2,32 @@
 
 #include <stdint.h>
 
-// Sez. 5.4/10.2/13 - orologio di sistema unico per tutto il firmware: NTP
-// quando disponibile, ancora NVS come fallback prima del primo sync (o se
-// l'orario torna implausibile). Non testabile via harness host-side
-// (dipende da configTime()/time() reali); la soglia di plausibilita'
-// (ClockPolicy) e' pura e testata a parte.
+// Sec. 5.4/10.2/13 - the single system clock for the whole firmware: NTP
+// when available, NVS anchor as a fallback before the first sync (or if
+// time becomes implausible again). Not testable via the host-side harness
+// (depends on real configTime()/time()); the plausibility threshold
+// (ClockPolicy) is pure and tested separately.
 
-// Carica l'ancora persistita (sez. 5.4.1). Da chiamare una sola volta in
-// setup(), prima di ogni uso di currentEpoch().
+// Loads the persisted anchor (sec. 5.4.1). Call once in setup(), before
+// any use of currentEpoch().
 void initClock();
 
-// Sez. 13 - avvia/ripete la sincronizzazione NTP in UTC (la conversione in
-// ora locale avviene solo in visualizzazione, sez. 5.3/10.3, mai qui). Da
-// richiamare ad ogni connessione WiFi riuscita, prima connessione compresa
-// e dopo ogni riconnessione.
+// Sec. 13 - starts/repeats NTP synchronization in UTC (conversion to local
+// time happens only at display time, sec. 5.3/10.3, never here). Call on
+// every successful WiFi connection, including the first one and after
+// every reconnection.
 void beginNtpSync();
 
-// Da chiamare ad ogni ciclo di loop: rileva il primo sync riuscito e
-// persiste l'ancora NVS (subito dopo il sync, poi ogni 10 minuti mentre
-// l'orario resta valido, sez. 5.4.1).
+// Call on every loop cycle: detects the first successful sync and
+// persists the NVS anchor (right after the sync, then every 10 minutes
+// while time stays valid, sec. 5.4.1).
 void tickClock(uint32_t nowMillis);
 
-// Sez. 5.4.2 - true se l'orario corrente proviene da NTP (non dall'ancora
-// stimata). Righe scritte mentre e' false vanno sempre marcate approssimate.
+// Sec. 5.4.2 - true if the current time comes from NTP (not from the
+// estimated anchor). Rows written while this is false must always be
+// marked approximate.
 bool isTimeSynced();
 
-// Sez. 3.3/5.4 - l'epoch corrente, da usare ovunque nel firmware al posto
-// di calcoli manuali su millis()/ancora.
+// Sec. 3.3/5.4 - the current epoch, to be used everywhere in the firmware
+// instead of manual millis()/anchor calculations.
 uint32_t currentEpoch();

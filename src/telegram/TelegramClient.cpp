@@ -5,7 +5,7 @@
 namespace {
 
 FastBot2 g_bot;
-constexpr int kMaxThrottleRetries = 3;  // sez. 6.6
+constexpr int kMaxThrottleRetries = 3;  // sec. 6.6
 
 CallbackHandler g_callbackHandler = nullptr;
 CommandHandler g_commandHandler = nullptr;
@@ -18,8 +18,8 @@ SendOutcomeCategory classifyResult(fb::Result& r) {
   return classifySendOutcome(outcome);
 }
 
-// Sez. 6.6 - fino a 3 ritentativi immediati su 429 rispettando retry_after,
-// non contati come fallimento. Condiviso da tutte le varianti di invio.
+// Sec. 6.6 - up to 3 immediate retries on 429 honoring retry_after, not
+// counted as a failure. Shared by every send variant.
 SendOutcomeCategory sendWithThrottleRetry(const fb::Message& msg) {
   for (int attempt = 0; attempt < kMaxThrottleRetries; attempt++) {
     fb::Result r = g_bot.sendMessage(msg);
@@ -30,7 +30,7 @@ SendOutcomeCategory sendWithThrottleRetry(const fb::Message& msg) {
     uint32_t retryAfterSec = r._parser["parameters"]["retry_after"];
     delay(retryAfterSec * 1000UL);
   }
-  // Terzo 429 consecutivo: passa al normale meccanismo di retry programmato.
+  // Third consecutive 429: hands off to the normal scheduled-retry mechanism.
   return SendOutcomeCategory::THROTTLING;
 }
 
@@ -49,7 +49,7 @@ void onUpdate(fb::Update& u) {
     if (!g_commandHandler) return;
 
     String text = u.message().text();
-    if (text.length() == 0 || text[0] != '/') return;  // solo comandi
+    if (text.length() == 0 || text[0] != '/') return;  // commands only
 
     IncomingCommand cmd;
     cmd.chatId = u.message().chat().id().toInt64();
@@ -62,7 +62,7 @@ void onUpdate(fb::Update& u) {
 
 void initTelegramClient(const char* token) {
   g_bot.setToken(token);
-  g_bot.setPollMode(fb::Poll::Long, 60000);  // sez. 3.5.1
+  g_bot.setPollMode(fb::Poll::Long, 60000);  // sec. 3.5.1
 }
 
 SendOutcomeCategory sendTelegramMessage(int64_t chatId, const char* text) {

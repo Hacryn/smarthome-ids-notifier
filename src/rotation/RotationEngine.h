@@ -7,23 +7,22 @@
 #include "../users/UserList.h"
 #include "RotationPolicy.h"
 
-// Sez. 9 - orchestrazione di rotazione e sorveglianza dello spazio. Non
-// testabile via harness host-side (dipende da LittleFS reale); la logica
-// di soglia (RotationPolicy) e' testata separatamente.
+// Sec. 9 - rotation orchestration and space monitoring. Not testable via
+// the host-side harness (depends on real LittleFS); the threshold logic
+// (RotationPolicy) is tested separately.
 
-// Sez. 9.4 - true se l'ultima verifica ha rilevato occupazione >= 95%
-// (le scritture non essenziali, es. righe PENDING, vengono sospese altrove).
+// Sec. 9.4 - true if the last check found usage >= 95% (non-essential
+// writes, e.g. PENDING rows, are suspended elsewhere).
 bool isFilesystemDegraded();
 
-// Sez. 9 - punto di ingresso periodico: esegue la rotazione se dovuta per
-// cadenza (sez. 9.2) o se lo spazio ha appena superato una soglia (sez.
-// 9.4, rotazione anticipata), e invia le segnalazioni agli admin sui
-// cambi di soglia. Il chiamante decide la cadenza con cui invocarla; non
-// serve chiamarla ad ogni ciclo di loop (nessuna scansione file per
-// decidere se la rotazione e' dovuta, sez. 9.2).
+// Sec. 9 - periodic entry point: runs rotation if due per cadence (sec.
+// 9.2) or if space just crossed a threshold (sec. 9.4, early rotation),
+// and sends admin alerts on threshold changes. The caller decides how
+// often to invoke it; no need to call it on every loop cycle (no file
+// scan to decide whether rotation is due, sec. 9.2).
 void performMaintenanceIfDue(const std::vector<AuthorizedUser>& users, uint32_t nowEpoch,
                               uint32_t retentionWeeks = kDefaultRetentionWeeks);
 
-// Sez. 9.3.2 - rimuove i file temporanei residui di una rotazione
-// interrotta da un blackout. Da chiamare una sola volta in setup().
+// Sec. 9.3.2 - removes leftover temp files from a rotation interrupted by
+// a blackout. Call once in setup().
 void cleanupStaleRotationFiles(const std::vector<AuthorizedUser>& users);

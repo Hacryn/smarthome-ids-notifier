@@ -2,8 +2,8 @@
 
 #include <stdint.h>
 
-// Sez. 5.4.1 - persistenza dell'ancora oraria in NVS (chiave "last_epoch").
-// Wrapper sottile su Preferences: nessuna logica propria, non testabile
-// via harness host-side (dipende dall'hardware NVS dell'ESP32).
+// Sec. 5.4.1 - NVS persistence of the time anchor ("last_epoch" key). Thin
+// wrapper over Preferences: no logic of its own, not testable via the
+// host-side harness (depends on the ESP32's NVS hardware).
 uint32_t loadLastEpoch();
 void saveLastEpoch(uint32_t epoch);

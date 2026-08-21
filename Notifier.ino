@@ -14,6 +14,7 @@
 #include "src/pins/PinDebounce.h"
 #include "src/pins/PinMonitor.h"
 #include "src/rotation/FsErrorCounter.h"
+#include "src/rotation/FilesystemHealth.h"
 #include "src/rotation/RotationEngine.h"
 #include "src/telegram/CallbackData.h"
 #include "src/telegram/CommandRouter.h"
@@ -24,49 +25,102 @@
 #include "src/users/UserList.h"
 #include "src/users/UserStorage.h"
 
-// Sez. 9 - manutenzione periodica (spazio + rotazione dovuta), non ad ogni
-// ciclo di loop.
+// Sec. 9 - periodic maintenance (space + rotation due), not on every loop cycle.
 constexpr uint32_t kMaintenanceIntervalMs = 10UL * 60UL * 1000UL;
 
-// Sez. 3.3 - un debouncer per voce di EVENT_TYPES (le voci senza pin restano inutilizzate).
+// Sec. 3.3 - one debouncer per EVENT_TYPES entry (entries with no pin stay unused).
 PinDebouncer g_debouncers[EVENT_TYPES_COUNT];
 
-// Sez. 5.4 - ultimo ts scritto nel log (monotonicita', sez. 5.4.3). L'ancora
-// oraria e lo stato di sincronizzazione NTP sono ora interamente in Clock.
+// Sec. 5.4 - last ts written to the log (monotonicity, sec. 5.4.3). The
+// time anchor and NTP sync state now live entirely in Clock.
 uint32_t g_lastWrittenTs = 0;
 
-// Sez. 13 - rileva il fronte "appena connesso" per (ri)avviare NTP ad ogni
-// connessione, non solo alla prima (sez. 13: "alla connessione e periodicamente").
+// Sec. 13 - detects the "just connected" edge to (re)start NTP on every
+// connection, not only the first (sec. 13: "on connection and periodically").
 bool g_wifiWasConnected = false;
 
 NetworkIssueTracker g_networkIssueTracker;
 
-// Sez. 4 - whitelist utenti autorizzati.
+// Sec. 4 - whitelist of authorized users.
 std::vector<AuthorizedUser> g_users;
 
-// Sez. 6.2/8 - scansione di recupero e riepilogo eventi aperti, una tantum
-// alla prima connessione WiFi (boot).
+// Sec. 6.2/8 - recovery scan and open-events summary, one-time on the
+// first WiFi connection (boot).
 bool g_bootTasksDone = false;
 
-// Sez. 9.4 - true se LittleFS.begin() e' stato riformattato al boot perche'
-// non montabile: da segnalare agli admin appena la connettivita' e' pronta.
+// Sec. 9.4 - true if LittleFS.begin() was reformatted at boot because it
+// was unmountable: to be reported to admins as soon as connectivity is ready.
 bool g_needsFsFormatAlert = false;
 
 uint32_t g_lastMaintenanceMillis = 0;
+
+bool initFilesystem() {
+  bool mounted = LittleFS.begin(false);
+  bool formatted = false;
+
+  // A format is allowed only if the initial mount fails: a successful mount
+  // with anomalous diagnostics must not automatically wipe data.
+  if (!mounted) {
+    Serial.println("LittleFS not mountable, attempting a format...");
+    mounted = LittleFS.begin(true);
+    formatted = mounted;
+    if (mounted) {
+      g_needsFsFormatAlert = true;
+    } else {
+      setFilesystemHealth(FilesystemHealth::MOUNT_FAILED);
+      Serial.println("LittleFS unrecoverable.");
+      return false;
+    }
+  }
+
+  if (LittleFS.totalBytes() == 0) {
+    setFilesystemHealth(FilesystemHealth::ZERO_CAPACITY);
+    Serial.println("LittleFS mounted but with zero capacity.");
+    return false;
+  }
+
+  constexpr const char* kProbePath = "/.littlefs-probe";
+  File probe = LittleFS.open(kProbePath, "w");
+  if (!probe) {
+    setFilesystemHealth(FilesystemHealth::PROBE_OPEN_FAILED);
+    Serial.println("LittleFS: opening the probe file failed.");
+    return false;
+  }
+
+  size_t written = probe.print("ok");
+  probe.close();
+  if (written != 2) {
+    setFilesystemHealth(FilesystemHealth::PROBE_WRITE_FAILED);
+    Serial.println("LittleFS: writing the probe file failed.");
+    return false;
+  }
+
+  if (!LittleFS.remove(kProbePath)) {
+    setFilesystemHealth(FilesystemHealth::PROBE_REMOVE_FAILED);
+    Serial.println("LittleFS: removing the probe file failed.");
+    return false;
+  }
+
+  setFilesystemHealth(formatted ? FilesystemHealth::READY_AFTER_FORMAT
+                                 : FilesystemHealth::READY);
+  Serial.print("LittleFS: ");
+  Serial.println(filesystemHealthText());
+  return true;
+}
 
 void handleRawTransition(const PinTransition& t) {
   g_debouncers[t.eventTypeIndex].onTransition(t.level, t.millisAtIsr);
 }
 
-// Sez. 9.4 - il primo errore di scrittura filesystem va sempre segnalato.
+// Sec. 9.4 - the first filesystem write error must always be reported.
 void alertOnFirstFsError() {
   if (fsErrorCounter().count() == 1) {
     notifyAdmins(g_users, "Primo errore di scrittura filesystem rilevato.");
   }
 }
 
-// Sez. 8.1 punto 1 - l'autorizzazione va rivalutata al click, mai data per
-// acquisita dal fatto che il bottone fosse visibile.
+// Sec. 8.1 point 1 - authorization must be re-evaluated at click time,
+// never taken for granted just because the button was visible.
 void onTelegramCallback(const IncomingCallback& cb) {
   if (!isAdmin(g_users, cb.fromChatId)) return;
 
@@ -77,20 +131,31 @@ void onTelegramCallback(const IncomingCallback& cb) {
   answerCallback(cb.queryId, closed ? "Evento chiuso" : "Evento gia' chiuso o non trovato");
 }
 
-// Scrive una riga nel registro e attiva la normale notifica (sez. 6.1),
-// riusata per gli eventi sui pin, NETWORK_ISSUE e REBOOT: stesso pattern
-// clamp+append+notify+segnalazione errori in tutti e tre i casi.
+// Writes a row to the log and triggers the normal notification (sec. 6.1),
+// reused for pin events, NETWORK_ISSUE, and REBOOT: same
+// clamp+append+notify+error-alert pattern in all three cases.
 void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs) {
   ClampedTimestamp clamped = applyMonotonicClamp(rawTs, g_lastWrittenTs);
 
   EventRecord rec{};
-  generateEventId(rec.id);
   rec.type = type;
   rec.status = status;
   rec.ts = clamped.ts;
-  // Sez. 5.4.2/5.4.3 - approssimato se l'orario non e' sincronizzato via NTP,
-  // o se il clamp di monotonicita' e' intervenuto (indipendentemente da NTP).
+  // Sec. 5.4.2/5.4.3 - approximate if time isn't synced via NTP, or if the
+  // monotonicity clamp fired (regardless of NTP).
   rec.approx = !isTimeSynced() || clamped.wasClamped;
+
+  if (status == EventStatus::START) {
+    OpenEvent existing{};
+    if (findOpenEventOfType(type, existing)) return;
+    generateEventId(rec.id);
+  } else if (status == EventStatus::END) {
+    OpenEvent existing{};
+    if (!findOpenEventOfType(type, existing)) return;
+    memcpy(rec.id, existing.id, sizeof(rec.id));
+  } else {
+    generateEventId(rec.id);
+  }
 
   if (appendEventRecord(rec)) {
     g_lastWrittenTs = clamped.ts;
@@ -107,51 +172,41 @@ void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs) {
 void setup() {
   Serial.begin(115200);
 
-  // Sez. 3.3/13 - Task WDT sul loop applicativo, timeout superiore al
-  // massimo timeout di rete (30s contro 10s). Un blocco genuino provoca un
-  // riavvio, che a sua volta genera un evento REBOOT notificato (sotto),
-  // rendendo visibile un guasto che altrimenti sarebbe silenzioso.
+  // Sec. 3.3/13 - Task WDT on the application loop, timeout above the
+  // maximum network timeout (30s vs. 10s). A genuine block triggers a
+  // reboot, which in turn generates a notified REBOOT event (below),
+  // making a failure visible that would otherwise be silent.
   esp_task_wdt_init(30, true);
   enableLoopWDT();
 
-  // Sez. 9.4 - un solo tentativo di format, esclusivamente se il filesystem
-  // risulta non montabile (mai come reazione a un errore su un FS montato
-  // correttamente).
-  if (!LittleFS.begin(false)) {
-    Serial.println("LittleFS non montabile, tento un format...");
-    if (LittleFS.begin(true)) {
-      g_needsFsFormatAlert = true;
-    } else {
-      Serial.println("LittleFS irrecuperabile.");
-    }
-  }
+  initFilesystem();
 
-  // Sez. 5.4.1 - carica l'ancora NVS: unica fonte di tempo finche' NTP non
-  // sincronizza (sotto, alla prima connessione WiFi); da quel momento ogni
-  // riga smette di essere marcata approssimata (sez. 5.4.2).
+  // Sec. 5.4.1 - loads the NVS anchor: the only time source until NTP
+  // syncs (below, on the first WiFi connection); from that point on, rows
+  // stop being marked approximate (sec. 5.4.2).
   initClock();
   g_lastWrittenTs = readLastWrittenTimestamp();
 
-  // Sez. 4.5 - onboarding: se users.json e' vuoto/assente, il chat_id di
-  // secrets.h diventa automaticamente il primo admin.
+  // Sec. 4.5 - onboarding: if users.json is empty/absent, the chat_id from
+  // secrets.h automatically becomes the first admin.
   if (!loadUsers(g_users)) {
-    Serial.println("Lettura users.json fallita");
+    Serial.println("Reading users.json failed");
   }
   if (ensureOnboardingAdmin(g_users, ONBOARDING_CHAT_ID, currentEpoch())) {
     if (!saveUsers(g_users)) {
-      Serial.println("Scrittura users.json fallita");
+      Serial.println("Writing users.json failed");
     }
   }
 
-  // Sez. 3.2/13 - REBOOT reso visibile ad ogni avvio (istantaneo, sempre
-  // notificato), incluso quello provocato dal watchdog qui sopra.
+  // Sec. 3.2/13 - REBOOT made visible on every boot (instant, always
+  // notified), including one triggered by the watchdog above.
   logAndNotifyEvent(EventType::REBOOT, EventStatus::INSTANT, currentEpoch());
 
-  // Sez. 9.3.2 - pulizia dei file temporanei residui di una rotazione
-  // interrotta da un blackout.
+  // Sec. 9.3.2 - cleanup of leftover temp files from a rotation
+  // interrupted by a blackout.
   cleanupStaleRotationFiles(g_users);
 
-  // Sez. 11.1 - configurazioni globali (default se non ancora presenti in NVS).
+  // Sec. 11.1 - global configuration (defaults if not yet present in NVS).
   initGlobalConfigStore();
 
   initPinMonitor();
@@ -182,12 +237,12 @@ void loop() {
   tickWifi(nowMillis);
   tickClock(nowMillis);
 
-  // TODO (fase 6): la definizione di sez. 3.4.1 richiede anche la
-  // raggiungibilita' delle API Telegram, non solo lo stato WiFi. Per ora
-  // NETWORK_ISSUE si basa unicamente sullo stato della connessione WiFi.
+  // TODO (phase 6): the definition in sec. 3.4.1 also requires Telegram
+  // API reachability, not just WiFi status. For now NETWORK_ISSUE is based
+  // solely on WiFi connection state.
   bool reachable = isWifiConnected();
   if (reachable && !g_wifiWasConnected) {
-    // Sez. 13 - NTP alla connessione e ad ogni riconnessione, non solo alla prima.
+    // Sec. 13 - NTP on connection and on every reconnection, not just the first.
     beginNtpSync();
   }
   g_wifiWasConnected = reachable;
@@ -198,26 +253,26 @@ void loop() {
     logAndNotifyEvent(EventType::NETWORK_ISSUE, EventStatus::START, netEv.ts);
   } else if (netEv.kind == NetworkIssueEvent::Kind::ENDED) {
     logAndNotifyEvent(EventType::NETWORK_ISSUE, EventStatus::END, netEv.ts);
-    // Sez. 6.2 - scansione di recupero al ripristino della connettivita'.
+    // Sec. 6.2 - recovery scan on connectivity restoration.
     runRecoveryScan(g_users, nowMillis, epochNow);
   }
 
   if (!g_bootTasksDone && reachable) {
-    // Sez. 6.2 - scansione di recupero al boot, una tantum.
+    // Sec. 6.2 - recovery scan at boot, one-time.
     runRecoveryScan(g_users, nowMillis, epochNow);
-    // Sez. 8 - riepilogo degli eventi rimasti aperti da un riavvio precedente.
+    // Sec. 8 - summary of events left open from a previous reboot.
     sendOpenEventsSummary(g_users);
     if (g_needsFsFormatAlert) {
       notifyAdmins(g_users, "LittleFS riformattato al boot (non montabile): storico perso.");
       g_needsFsFormatAlert = false;
     }
-    // Sez. 9 - verifica dello spazio ed eventuale rotazione, anche al boot.
+    // Sec. 9 - space check and any needed rotation, also at boot.
     performMaintenanceIfDue(g_users, epochNow, globalConfig().retentionWeeks);
     g_bootTasksDone = true;
   }
 
   if (nowMillis - g_lastMaintenanceMillis >= kMaintenanceIntervalMs) {
-    // Sez. 9.2/9.4 - verifica periodica di spazio e cadenza di rotazione.
+    // Sec. 9.2/9.4 - periodic check of space and rotation cadence.
     performMaintenanceIfDue(g_users, epochNow, globalConfig().retentionWeeks);
     g_lastMaintenanceMillis = nowMillis;
   }

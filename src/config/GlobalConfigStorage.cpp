@@ -7,7 +7,7 @@ const char* kNamespace = "notifier";
 }  // namespace
 
 GlobalConfig loadGlobalConfig() {
-  GlobalConfig cfg;  // valori di default se le chiavi non esistono ancora
+  GlobalConfig cfg;  // default values if the keys don't exist yet
 
   Preferences prefs;
   prefs.begin(kNamespace, true);

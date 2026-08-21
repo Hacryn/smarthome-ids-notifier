@@ -64,7 +64,7 @@ static void test_ring_buffer_keeps_only_last_n() {
   }
 
   assert(log.events().size() == 2);
-  // Devono restare gli ultimi due osservati (id "3" e "4").
+  // The last two observed (id "3" and "4") should remain.
   auto it = log.events().begin();
   assert(it->startTs == 1003);
   ++it;
@@ -80,11 +80,11 @@ static void test_orphan_end_for_evicted_id_is_ignored() {
          1200);
 
   log.observe(first);
-  log.observe(second);  // "first" scartato dal ring (cap=1)
-  log.observe(endForFirst);  // orfano, ignorato senza crash
+  log.observe(second);  // "first" evicted from the ring (cap=1)
+  log.observe(endForFirst);  // orphan, ignored without crashing
 
   assert(log.events().size() == 1);
-  assert(!log.events().front().hasEnd);  // "second" resta aperto
+  assert(!log.events().front().hasEnd);  // "second" stays open
 }
 
 static void test_format_duration_seconds() {
@@ -102,6 +102,6 @@ int main() {
   test_ring_buffer_keeps_only_last_n();
   test_orphan_end_for_evicted_id_is_ignored();
 
-  printf("test_event_aggregator: tutti i test superati\n");
+  printf("test_event_aggregator: all tests passed\n");
   return 0;
 }

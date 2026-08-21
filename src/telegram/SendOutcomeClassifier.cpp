@@ -17,9 +17,9 @@ SendOutcomeCategory classifySendOutcome(const RawSendOutcome& outcome) {
       if (outcome.errorCode >= 500 && outcome.errorCode < 600) {
         return SendOutcomeCategory::TRANSIENT_SERVER;
       }
-      // Codice non previsto dalla tabella di sez. 6.5: trattato come errore
-      // di sistema, mai come fallimento del destinatario (non abbandoniamo
-      // un invio per un codice che non sappiamo interpretare).
+      // Code not covered by the table in sec. 6.5: treated as a system
+      // error, never as a recipient failure (we don't abandon a send over
+      // a code we don't know how to interpret).
       return SendOutcomeCategory::SYSTEM_ERROR;
   }
 }

@@ -18,10 +18,10 @@ std::string formatTimestampForUser(uint32_t epoch, const UserConfig& cfg, bool a
 
   char buf[64];
   if (strftime(buf, sizeof(buf), cfg.dateFormat.c_str(), &tmVal) == 0) {
-    buf[0] = '\0';  // formato non valido/troppo lungo: meglio vuoto che troncato a meta'
+    buf[0] = '\0';  // invalid/too-long format: better empty than half-truncated
   }
 
-  setenv("TZ", "UTC0", 1);  // sez. 10.3 - ripristino dopo l'uso
+  setenv("TZ", "UTC0", 1);  // sec. 10.3 - restore after use
   tzset();
 
   std::string result;

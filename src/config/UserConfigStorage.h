@@ -4,12 +4,12 @@
 
 #include "UserConfig.h"
 
-// Sez. 4.4 - persistenza di userconfig.json su LittleFS, riscritto per
-// intero ad ogni modifica (write-then-rename, sez. 9.3.2). Non testabile
-// via harness host-side (dipende da LittleFS reale).
+// Sec. 4.4 - persistence of userconfig.json on LittleFS, rewritten in full
+// on every change (write-then-rename, sec. 9.3.2). Not testable via the
+// host-side harness (depends on real LittleFS).
 
-// Ritorna true anche se il file non esiste ancora (nessuna preferenza
-// personalizzata non e' un errore); false solo su un errore di lettura reale.
+// Returns true even if the file doesn't exist yet (no custom preferences
+// isn't an error); false only on a real read error.
 bool loadAllUserConfigs(std::vector<UserConfig>& out);
 
 bool saveAllUserConfigs(const std::vector<UserConfig>& configs);

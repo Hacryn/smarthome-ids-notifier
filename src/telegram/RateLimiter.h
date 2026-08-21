@@ -2,11 +2,11 @@
 
 #include <stdint.h>
 
-// Sez. 6.6 - intervallo minimo tra due invii Telegram consecutivi.
+// Sec. 6.6 - minimum interval between two consecutive Telegram sends.
 constexpr uint32_t kMinSendIntervalMs = 1100;
 
-// Non bloccante: il chiamante interroga tryConsume() ad ogni ciclo e invia
-// solo quando ritorna true, invece di attendere con un delay().
+// Non-blocking: the caller polls tryConsume() every cycle and sends only
+// when it returns true, instead of waiting with a delay().
 class RateLimiter {
  public:
   bool tryConsume(uint32_t nowMillis);

@@ -6,7 +6,7 @@
 
 #include "../events/EventTypes.h"
 
-// Sez. 7.2 - quale notifica dell'evento si sta tracciando.
+// Sec. 7.2 - which notification of the event is being tracked.
 enum class NotifyStatus : uint8_t {
   NOTIFIED_INSTANT = 0,
   NOTIFIED_START = 1,
@@ -20,24 +20,24 @@ enum class NotifyState : uint8_t {
 };
 
 struct NotificationRecord {
-  char id[33];  // stesso id dell'evento in log.jsonl (sez. 5.2)
+  char id[33];  // same id as the event in log.jsonl (sec. 5.2)
   NotifyStatus status;
   uint32_t ts;
   NotifyState state;
-  uint32_t n = 0;  // rilevante solo per PENDING/ABANDONED (sez. 7.2)
+  uint32_t n = 0;  // relevant only for PENDING/ABANDONED (sec. 7.2)
 };
 
 NotifyStatus eventStatusToNotifyStatus(EventStatus status);
 EventStatus notifyStatusToEventStatus(NotifyStatus status);
 
-// Sez. 4.2 - il segno meno del chat_id va sostituito da un prefisso testuale
-// quando compone un nome file. Pura formattazione, nessuna dipendenza da FS.
+// Sec. 4.2 - the chat_id's minus sign must be replaced with a text prefix
+// when composing a filename. Pure formatting, no dependency on the FS.
 std::string notificationLogPath(int64_t chatId);
 
-// Chiave di raggruppamento (id, status) per la ricostruzione dello stato
-// pendente (sez. 7.2 - "ultima riga vince" per ciascuna coppia).
+// Grouping key (id, status) for reconstructing pending state (sec. 7.2 -
+// "the last row wins" for each pair).
 std::string notificationKey(const char* id, NotifyStatus status);
 
-// Sez. 7.2 - schema: {"id","status","ts","state","n"?}. "n" omesso su RESOLVED.
+// Sec. 7.2 - schema: {"id","status","ts","state","n"?}. "n" omitted on RESOLVED.
 std::string serializeNotificationRecord(const NotificationRecord& rec);
 bool parseNotificationRecord(const std::string& line, NotificationRecord& out);

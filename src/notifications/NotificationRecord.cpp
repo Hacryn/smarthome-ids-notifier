@@ -77,7 +77,7 @@ bool parseNotificationRecord(const std::string& line, NotificationRecord& out) {
   out.status = static_cast<NotifyStatus>(status.as<uint8_t>());
   out.ts = ts.as<uint32_t>();
   out.state = static_cast<NotifyState>(state.as<uint8_t>());
-  out.n = doc["n"].as<uint32_t>();  // assente -> 0
+  out.n = doc["n"].as<uint32_t>();  // absent -> 0
 
   return true;
 }

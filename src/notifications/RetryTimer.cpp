@@ -6,7 +6,7 @@ void RetryTimer::onTransientFailure(uint32_t nowMillis, uint32_t intervalMs) {
 }
 
 bool RetryTimer::onNormalFlowSuccess() {
-  if (scanInProgress_) return false;  // sez. 6.3.1
+  if (scanInProgress_) return false;  // sec. 6.3.1
   return active_;
 }
 

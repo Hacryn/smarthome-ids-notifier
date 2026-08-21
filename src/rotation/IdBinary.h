@@ -4,8 +4,8 @@
 
 #include <array>
 
-// Sez. 9.3.1 - conversione dell'id esadecimale (32 caratteri, sez. 5.2) in
-// 16 byte binari, per contenere l'occupazione RAM della raccolta di id
-// eliminabili durante la rotazione. Ritorna false se hexId non e' lungo
-// esattamente 32 caratteri o contiene caratteri non esadecimali.
+// Sec. 9.3.1 - conversion of the hex id (32 characters, sec. 5.2) into 16
+// binary bytes, to keep the RAM footprint of the deletable-id collection
+// small during rotation. Returns false if hexId isn't exactly 32
+// characters long or contains non-hex characters.
 bool hexIdToBinary(const char* hexId, std::array<uint8_t, 16>& out);

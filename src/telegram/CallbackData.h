@@ -2,9 +2,9 @@
 
 #include <string>
 
-// Sez. 8.1 - formato "c:<id>" (34 byte, entro il limite di 64 byte imposto
-// da Telegram al callback_data).
+// Sec. 8.1 - "c:<id>" format (34 bytes, within the 64-byte limit Telegram
+// imposes on callback_data).
 std::string closeEventCallbackData(const char* id);
 
-// Ritorna false se il prefisso non e' "c:" o l'id non e' lungo 32 caratteri.
+// Returns false if the prefix isn't "c:" or the id isn't 32 characters long.
 bool parseCloseEventCallbackData(const std::string& data, std::string& outId);

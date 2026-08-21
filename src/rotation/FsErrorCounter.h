@@ -2,14 +2,14 @@
 
 #include <stdint.h>
 
-// Sez. 9.4 - contatore di errori di scrittura filesystem (dopo un retry
-// gia' fallito). Nessuna dipendenza da Arduino/LittleFS: la classe e' pura
-// e testabile; l'istanza condivisa sotto e' il punto di accesso usato dai
-// moduli di scrittura reali.
+// Sec. 9.4 - filesystem write error counter (after a retry has already
+// failed). No dependency on Arduino/LittleFS: the class is pure and
+// testable; the shared instance below is the access point used by the
+// real write modules.
 class FsErrorCounter {
  public:
-  // Ritorna true se questo e' il primo errore mai registrato (il chiamante
-  // lo usa per decidere se notificare gli admin, sez. 9.4).
+  // Returns true if this is the first error ever recorded (the caller uses
+  // this to decide whether to notify admins, sec. 9.4).
   bool recordFailure();
   uint32_t count() const { return count_; }
 
@@ -17,6 +17,6 @@ class FsErrorCounter {
   uint32_t count_ = 0;
 };
 
-// Istanza globale condivisa da tutti i moduli di scrittura su LittleFS,
-// esposta anche in /status (sez. 12.2).
+// Global instance shared by every LittleFS write module, also exposed in
+// /status (sec. 12.2).
 FsErrorCounter& fsErrorCounter();

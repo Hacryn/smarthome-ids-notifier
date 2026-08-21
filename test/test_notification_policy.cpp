@@ -18,7 +18,7 @@ static void test_recovery_beyond_grace_period_marked_recovered() {
 }
 
 static void test_recovery_at_exact_grace_boundary_not_recovered() {
-  RecoveryPresentation p = decideRecoveryPresentation(1300, 1000, false, 300);  // esattamente 300s
+  RecoveryPresentation p = decideRecoveryPresentation(1300, 1000, false, 300);  // exactly 300s
   assert(!p.isRecovered);
 }
 
@@ -40,10 +40,10 @@ static void test_exceeds_max_retries() {
 }
 
 static void test_is_near_abandonment() {
-  assert(!isNearAbandonment(20, 24));  // 4 tentativi rimasti, sopra il margine
-  assert(isNearAbandonment(21, 24));   // 3 tentativi rimasti
+  assert(!isNearAbandonment(20, 24));  // 4 attempts left, above the margin
+  assert(isNearAbandonment(21, 24));   // 3 attempts left
   assert(isNearAbandonment(24, 24));
-  assert(isNearAbandonment(2, 2));     // maxRetries sotto il margine: soglia = maxRetries stesso
+  assert(isNearAbandonment(2, 2));     // maxRetries below the margin: threshold = maxRetries itself
 }
 
 static void test_retry_timer_starts_on_first_failure() {
@@ -57,17 +57,17 @@ static void test_retry_timer_starts_on_first_failure() {
 static void test_retry_timer_resets_on_repeated_failure() {
   RetryTimer t;
   t.onTransientFailure(1000, 60000);
-  t.onTransientFailure(50000, 60000);  // nuovo fallimento prima della scadenza: reset
-  assert(!t.isDue(61000));             // sarebbe scaduto rispetto al primo, non al secondo
+  t.onTransientFailure(50000, 60000);  // new failure before expiry: reset
+  assert(!t.isDue(61000));             // would have expired against the first, not the second
   assert(t.isDue(110000));
 }
 
 static void test_normal_flow_success_triggers_scan_only_if_active() {
   RetryTimer t;
-  assert(!t.onNormalFlowSuccess());  // timer mai armato -> nessuna scansione
+  assert(!t.onNormalFlowSuccess());  // timer never armed -> no scan
 
   t.onTransientFailure(1000, 60000);
-  assert(t.onNormalFlowSuccess());  // timer attivo -> scatena scansione anticipata
+  assert(t.onNormalFlowSuccess());  // timer active -> triggers an early scan
 }
 
 static void test_scan_in_progress_blocks_new_triggers() {
@@ -75,8 +75,8 @@ static void test_scan_in_progress_blocks_new_triggers() {
   t.onTransientFailure(1000, 60000);
   t.beginScan();
 
-  assert(!t.onNormalFlowSuccess());  // sez. 6.3.1 - nessun successo puo' scatenare durante una scansione
-  assert(!t.isDue(999999));          // nessuna nuova scansione mentre una e' in corso
+  assert(!t.onNormalFlowSuccess());  // sec. 6.3.1 - no success can trigger during a scan
+  assert(!t.isDue(999999));          // no new scan while one is in progress
 }
 
 static void test_end_scan_cancels_timer_when_all_resolved() {
@@ -117,6 +117,6 @@ int main() {
   test_end_scan_cancels_timer_when_all_resolved();
   test_end_scan_restarts_timer_when_still_pending();
 
-  printf("test_notification_policy: tutti i test superati\n");
+  printf("test_notification_policy: all tests passed\n");
   return 0;
 }

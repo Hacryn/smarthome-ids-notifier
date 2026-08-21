@@ -38,7 +38,7 @@ std::string serializeUserConfigs(const std::vector<UserConfig>& configs) {
 
 bool parseUserConfigs(const std::string& json, std::vector<UserConfig>& out) {
   out.clear();
-  if (json.empty()) return true;  // file assente/vuoto -> nessuna config, non un errore
+  if (json.empty()) return true;  // missing/empty file -> no config, not an error
 
   JsonDocument doc;
   if (deserializeJson(doc, json)) return false;

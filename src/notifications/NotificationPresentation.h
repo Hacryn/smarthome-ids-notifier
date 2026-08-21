@@ -3,32 +3,32 @@
 #include <stddef.h>
 #include <stdint.h>
 
-constexpr uint32_t kGracePeriodSec = 300;    // sez. 6.4 - default 5 minuti
-constexpr uint32_t kAggregateThreshold = 3;  // sez. 6.7 - default
-constexpr uint32_t kMaxRetries = 24;         // sez. 6.5 - default
+constexpr uint32_t kGracePeriodSec = 300;    // sec. 6.4 - default 5 minutes
+constexpr uint32_t kAggregateThreshold = 3;  // sec. 6.7 - default
+constexpr uint32_t kMaxRetries = 24;         // sec. 6.5 - default
 
 struct RecoveryPresentation {
-  bool isRecovered;  // prefisso esplicito di recupero
-  bool isApprox;     // marcatura "~" sul timestamp
+  bool isRecovered;  // explicit recovery prefix
+  bool isApprox;     // "~" marking on the timestamp
 };
 
-// Sez. 6.4 - decide se una notifica pendente va presentata come "recuperata".
-// Un evento con timestamp approssimato (sez. 5.4) e' sempre trattato come
-// recuperato/approssimato, indipendentemente dallo scarto temporale.
+// Sec. 6.4 - decides whether a pending notification should be presented as
+// "recovered". An event with an approximate timestamp (sec. 5.4) is always
+// treated as recovered/approximate, regardless of the computed time gap.
 RecoveryPresentation decideRecoveryPresentation(uint32_t nowEpoch, uint32_t eventTs,
                                                  bool eventApprox, uint32_t gracePeriodSec);
 
-// Sez. 6.7 - sopra soglia, le notifiche pendenti di un utente vanno
-// raggruppate in un unico messaggio invece che inviate singolarmente.
+// Sec. 6.7 - above the threshold, a user's pending notifications should be
+// grouped into a single message instead of sent individually.
 bool shouldAggregate(size_t pendingCount, uint32_t threshold);
 
-// Sez. 6.5 - true se il conteggio tentativi, dopo l'incremento per il
-// fallimento corrente, supera il limite: la notifica va abbandonata.
+// Sec. 6.5 - true if the attempt count, after incrementing for the current
+// failure, exceeds the limit: the notification should be abandoned.
 bool exceedsMaxRetries(uint32_t attemptCountAfterFailure, uint32_t maxRetries);
 
-// Sez. 7.2/8 - "un record PENDING che si avvicina a max_retries viene
-// segnalato nel riepilogo periodico insieme agli eventi aperti": il design
-// non specifica una soglia numerica, quindi ne fissiamo una esplicita qui
-// (ultimi 3 tentativi disponibili) come scelta documentata, non implicita.
+// Sec. 7.2/8 - "a PENDING record approaching max_retries is flagged in the
+// periodic summary together with open events": the design doesn't specify
+// a numeric threshold, so we fix one explicitly here (the last 3 available
+// attempts) as a documented choice, not an implicit one.
 constexpr uint32_t kNearAbandonmentMargin = 3;
 bool isNearAbandonment(uint32_t n, uint32_t maxRetries);

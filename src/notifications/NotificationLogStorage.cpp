@@ -42,7 +42,7 @@ bool appendNotificationRecord(int64_t chatId, const NotificationRecord& rec) {
   std::string line = serializeNotificationRecord(rec) + "\n";
 
   if (writeNotificationLine(path, line)) return true;
-  if (writeNotificationLine(path, line)) return true;  // sez. 9.4 - un solo retry
+  if (writeNotificationLine(path, line)) return true;  // sec. 9.4 - a single retry
 
   fsErrorCounter().recordFailure();
   return false;

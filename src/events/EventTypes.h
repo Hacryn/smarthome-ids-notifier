@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 
-// Sez. 3.2 di DESIGN.md - valori enum mai riassegnati, estendibili solo in coda.
+// Sec. 3.2 of DESIGN.md - enum values are never reassigned, extendable only at the end.
 enum class EventType : uint8_t {
   REBOOT = 0,
   POWER_LOSS = 1,
@@ -14,14 +14,14 @@ enum class EventType : uint8_t {
   ALARM_GARAGE = 12,
 };
 
-// Sez. 5.2 - status della riga di log.
+// Sec. 5.2 - status of the log row.
 enum class EventStatus : uint8_t {
   START = 0,
   END = 1,
   INSTANT = 2,
 };
 
-// Sez. 3.2.1 - politica di notifica per tipo.
+// Sec. 3.2.1 - notification policy per type.
 enum class NotifyPolicy : uint8_t {
   START_AND_END,
   ONLY_END,
@@ -31,16 +31,16 @@ enum class NotifyPolicy : uint8_t {
 struct EventTypeConfig {
   EventType type;
   const char* label;
-  const char* commandName;  // sez. 12 - identificatore usato da /notify <tipo> on|off
-  int pin;  // -1 = nessuno (evento generato internamente: REBOOT, NETWORK_ISSUE)
+  const char* commandName;  // sec. 12 - identifier used by /notify <type> on|off
+  int pin;  // -1 = none (internally-generated event: REBOOT, NETWORK_ISSUE)
   bool active_low;
   bool enabled;
   NotifyPolicy notify_policy;
 };
 
-// Sez. 3.2.1 - unico punto di verita della mappatura tipo -> comportamento.
-// TODO(hardware): i numeri di pin sono placeholder, da assegnare in base al
-// cablaggio reale delle PGM sulla centralina (sez. 2.1) prima della fase 4.
+// Sec. 3.2.1 - the single source of truth for the type -> behavior mapping.
+// TODO(hardware): the pin numbers are placeholders, to be assigned based on
+// the real PGM wiring on the panel (sec. 2.1) before relying on this.
 inline const EventTypeConfig EVENT_TYPES[] = {
     {EventType::REBOOT, "Riavvio", "REBOOT", -1, false, true, NotifyPolicy::INSTANT},
     {EventType::POWER_LOSS, "Mancanza rete 230V", "POWER_LOSS", 4, false, true,
@@ -70,8 +70,8 @@ inline const EventTypeConfig* findEventTypeConfigByCommandName(const char* name)
   return nullptr;
 }
 
-// Sez. 3.2.1/3.2.3 - se una notifica va inviata per quello specifico status,
-// secondo la politica del tipo (es. NETWORK_ISSUE notifica solo END).
+// Sec. 3.2.1/3.2.3 - whether a notification should be sent for that
+// specific status, per the type's policy (e.g. NETWORK_ISSUE notifies END only).
 inline bool shouldNotifyForStatus(NotifyPolicy policy, EventStatus status) {
   switch (policy) {
     case NotifyPolicy::START_AND_END:

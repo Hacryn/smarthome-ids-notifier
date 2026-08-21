@@ -6,25 +6,25 @@
 
 #include "../events/EventLog.h"
 
-constexpr size_t kMaxDeletableIdsPerPass = 256;  // sez. 9.3.1 - ~4 KB di RAM
+constexpr size_t kMaxDeletableIdsPerPass = 256;  // sec. 9.3.1 - ~4 KB of RAM
 
-// Sez. 9.3.1 - passata 1 dell'algoritmo di rotazione: raccoglie (in forma
-// binaria a 16 byte) gli id degli eventi eliminabili - quelli con una riga
-// END/INSTANT il cui ts e' anteriore al cutoff - fino a un tetto fisso.
-// Progettata per essere alimentata riga per riga in streaming (observe()),
-// senza mai richiedere l'intero file in memoria.
+// Sec. 9.3.1 - pass 1 of the rotation algorithm: collects (in 16-byte
+// binary form) the ids of deletable events - those with an END/INSTANT
+// row whose ts is earlier than the cutoff - up to a fixed cap. Designed to
+// be fed one row at a time in streaming (observe()), never requiring the
+// whole file in memory.
 class DeletableIdCollector {
  public:
   explicit DeletableIdCollector(uint32_t cutoff, size_t cap = kMaxDeletableIdsPerPass);
 
-  // Ignora silenziosamente la riga se il tetto e' gia' stato raggiunto, se
-  // non e' una riga di chiusura (END/INSTANT), o se e' successiva al cutoff.
+  // Silently ignores the row if the cap has already been reached, if it
+  // isn't a closing row (END/INSTANT), or if it's after the cutoff.
   void observe(const EventRecord& rec);
 
   bool capReached() const { return capReached_; }
   const std::vector<std::array<uint8_t, 16>>& ids() const { return ids_; }
 
-  // Sez. 9.3.1 passata 2 - true se l'id (esadecimale) e' tra quelli raccolti.
+  // Sec. 9.3.1 pass 2 - true if the (hex) id is among those collected.
   bool contains(const char* hexId) const;
 
  private:

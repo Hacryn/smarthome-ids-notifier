@@ -2,26 +2,26 @@
 
 #include <stdint.h>
 
-constexpr uint32_t kRetryIntervalMs = 60UL * 60UL * 1000UL;  // sez. 6.3 - default 60 minuti
+constexpr uint32_t kRetryIntervalMs = 60UL * 60UL * 1000UL;  // sec. 6.3 - default 60 minutes
 
-// Sez. 6.3/6.3.1 - timer di retry non bloccante con protezione dalla
-// rientranza durante una scansione di recupero.
+// Sec. 6.3/6.3.1 - non-blocking retry timer with reentrancy protection
+// during a recovery scan.
 class RetryTimer {
  public:
-  // Sez. 6.3 - fallimento transitorio: avvia il timer se non attivo, o lo
-  // resetta al valore pieno se gia' attivo (stessa operazione in entrambi i casi).
+  // Sec. 6.3 - transient failure: starts the timer if not active, or
+  // resets it to the full value if already active (same operation either way).
   void onTransientFailure(uint32_t nowMillis, uint32_t intervalMs);
 
-  // Sez. 6.3 - successo nel flusso normale (mai durante una scansione, sez.
-  // 6.3.1): ritorna true se va scatenata una scansione anticipata. Il timer
-  // NON viene toccato qui: sara' la conclusione della scansione a deciderne
-  // lo stato finale (endScan), con la stessa regola dello scadere naturale.
+  // Sec. 6.3 - success in the normal flow (never during a scan, sec.
+  // 6.3.1): returns true if an early scan should be triggered. The timer
+  // is NOT touched here: the scan's conclusion (endScan) will decide its
+  // final state, per the same rule as natural expiry.
   bool onNormalFlowSuccess();
 
   bool isDue(uint32_t nowMillis) const;
 
   void beginScan();
-  // allResolvedOrAbandoned: esito della scansione appena conclusa.
+  // allResolvedOrAbandoned: outcome of the just-concluded scan.
   void endScan(bool allResolvedOrAbandoned, uint32_t nowMillis, uint32_t intervalMs);
 
   bool scanInProgress() const { return scanInProgress_; }

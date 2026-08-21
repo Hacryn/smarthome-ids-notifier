@@ -2,16 +2,16 @@
 
 #include "GlobalConfig.h"
 
-// Sez. 11.1 - persistenza NVS delle configurazioni globali. Non testabile
-// via harness host-side (dipende da NVS reale).
+// Sec. 11.1 - NVS persistence of the global configuration. Not testable via
+// the host-side harness (depends on real NVS).
 GlobalConfig loadGlobalConfig();
 void saveGlobalConfig(const GlobalConfig& cfg);
 
-// Istanza condivisa in RAM (pattern gia' usato per fsErrorCounter()), cosi'
-// i moduli che oggi leggono le costanti kXxx come default possono leggere
-// il valore effettivo senza dover ricevere GlobalConfig come parametro
-// esplicito in ogni firma. initGlobalConfigStore() va chiamata una sola
-// volta in setup(); i comandi /setXxx (CommandRouter) aggiornano il campo
-// e richiamano saveGlobalConfig(globalConfig()) per persisterlo.
+// Shared in-RAM instance (same pattern already used for fsErrorCounter()),
+// so modules that currently read the kXxx constants as defaults can read
+// the effective value instead, without having to receive GlobalConfig as an
+// explicit parameter in every signature. initGlobalConfigStore() must be
+// called once in setup(); the /setXxx commands (CommandRouter) update the
+// field and call saveGlobalConfig(globalConfig()) to persist it.
 GlobalConfig& globalConfig();
 void initGlobalConfigStore();

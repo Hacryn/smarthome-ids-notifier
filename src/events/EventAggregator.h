@@ -8,35 +8,35 @@
 
 #include "EventLog.h"
 
-// Sez. 6.7/12.1 - formatta una durata in secondi come "Xm" o "Xh Ym".
+// Sec. 6.7/12.1 - formats a duration in seconds as "Xm" or "Xh Ym".
 std::string formatDurationSeconds(uint32_t seconds);
 
-// Sez. 12.1 - un evento aggregato: le righe START/END con lo stesso id
-// unite in una sola voce con la durata calcolabile dal chiamante.
+// Sec. 12.1 - an aggregated event: the START/END rows sharing the same id
+// merged into a single entry with a duration the caller can compute.
 struct AggregatedEvent {
   char id[33];
   EventType type;
   uint32_t startTs;
   bool startApprox;
-  bool isInstant;  // sez. 3.2 - REBOOT e simili: nessun END atteso
+  bool isInstant;  // sec. 3.2 - REBOOT and similar: no END expected
   bool hasEnd;
   uint32_t endTs;
   bool endApprox;
 };
 
-// Sez. 12.1 - "il file viene letto una sola volta in streaming, mantenendo
-// in RAM un ring buffer degli ultimi N eventi aggregati (non delle righe)".
-// Alimentata riga per riga in ordine (observe()), non richiede mai l'intero
-// file in memoria. Una riga END per un id gia' scartato dal ring (perche'
-// piu' vecchio degli ultimi N) viene ignorata silenziosamente.
+// Sec. 12.1 - "the file is read once, in streaming, keeping in RAM a ring
+// buffer of the last N aggregated events (not of rows)". Fed one row at a
+// time in order (observe()), never requires the whole file in memory. An
+// END row for an id already evicted from the ring (because it's older than
+// the last N) is silently ignored.
 class AggregatedEventLog {
  public:
   explicit AggregatedEventLog(size_t maxEvents);
 
   void observe(const EventRecord& rec);
 
-  // In ordine cronologico crescente (dal piu' vecchio al piu' recente tra
-  // quelli conservati).
+  // In increasing chronological order (from the oldest to the most recent
+  // among those kept).
   const std::list<AggregatedEvent>& events() const { return ring_; }
 
  private:

@@ -36,11 +36,11 @@ bool saveAllUserConfigs(const std::vector<UserConfig>& configs) {
   std::string json = serializeUserConfigs(configs);
 
   bool written = writeConfigsTmp(json);
-  if (!written) written = writeConfigsTmp(json);  // sez. 9.4 - un solo retry
+  if (!written) written = writeConfigsTmp(json);  // sec. 9.4 - a single retry
   if (!written) {
     fsErrorCounter().recordFailure();
     return false;
   }
 
-  return LittleFS.rename(kTmpPath, kPath);  // sez. 9.3.2 - rinomina atomica
+  return LittleFS.rename(kTmpPath, kPath);  // sec. 9.3.2 - atomic rename
 }

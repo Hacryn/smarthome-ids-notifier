@@ -19,7 +19,7 @@ static void test_status_mapping_roundtrip() {
 
 static void test_notification_log_path_positive_and_negative() {
   assert(notificationLogPath(111111111LL) == "/notif_111111111.jsonl");
-  assert(notificationLogPath(-1001234567890LL) == "/notif_g1001234567890.jsonl");  // sez. 4.2
+  assert(notificationLogPath(-1001234567890LL) == "/notif_g1001234567890.jsonl");  // sec. 4.2
 }
 
 static void test_serialize_omits_n_on_resolved() {
@@ -28,7 +28,7 @@ static void test_serialize_omits_n_on_resolved() {
   rec.status = NotifyStatus::NOTIFIED_START;
   rec.ts = 1755500000;
   rec.state = NotifyState::RESOLVED;
-  rec.n = 5;  // non deve comparire
+  rec.n = 5;  // must not appear
 
   std::string json = serializeNotificationRecord(rec);
   assert(json.find("\"n\"") == std::string::npos);
@@ -113,7 +113,7 @@ static void test_fold_distinguishes_status_within_same_id() {
   rows.push_back(end);
 
   auto latest = foldNotificationRecords(rows);
-  assert(latest.size() == 2);  // stesso id, status diversi -> due voci
+  assert(latest.size() == 2);  // same id, different statuses -> two entries
 }
 
 static void test_pending_from_filters_by_state() {
@@ -148,6 +148,6 @@ int main() {
   test_fold_distinguishes_status_within_same_id();
   test_pending_from_filters_by_state();
 
-  printf("test_notification_record: tutti i test superati\n");
+  printf("test_notification_record: all tests passed\n");
   return 0;
 }

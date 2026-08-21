@@ -24,8 +24,8 @@ namespace {
 struct OutboundMessage {
   int64_t chatId = 0;
   std::string text;
-  bool trackDelivery = false;  // se true, un esito diverso da successo aggiorna sez. 7
-  bool isScanMessage = false;  // se true, partecipa al conteggio di fine scansione (sez. 6.3.1)
+  bool trackDelivery = false;  // if true, an outcome other than success updates sec. 7
+  bool isScanMessage = false;  // if true, counts toward scan-completion tracking (sec. 6.3.1)
   char eventId[33] = {0};
   NotifyStatus notifyStatus = NotifyStatus::NOTIFIED_INSTANT;
   uint32_t eventTs = 0;
@@ -38,7 +38,7 @@ RetryTimer g_retryTimer;
 
 uint32_t g_scanMessagesInFlight = 0;
 bool g_scanHadPendingResult = false;
-std::string g_lastSystemError;  // sez. 12.2 - esposto in /status
+std::string g_lastSystemError;  // sec. 12.2 - exposed in /status
 
 void setEventId(OutboundMessage& msg, const char* id) {
   memcpy(msg.eventId, id, 32);
@@ -60,17 +60,17 @@ std::string buildEventMessageText(const char* label, EventStatus status,
 std::string buildRecoveryMessageText(const char* label, const std::string& formattedTs,
                                       bool isRecovered) {
   std::string text;
-  if (isRecovered) text += "[recuperata] ";  // sez. 6.4
+  if (isRecovered) text += "[recuperata] ";  // sec. 6.4
   text += label;
   text += " (" + formattedTs + ")";
   return text;
 }
 
-// Sez. 6.7 - raggruppa per id, cosi' una coppia START+END pendenti insieme
-// finisce su una sola riga con la durata, come nell'esempio del documento
-// (stessa logica di accoppiamento gia' scritta per /log in EventAggregator,
-// qui riscritta perche' opera su NotificationRecord/NotifyStatus - sez. 7.2 -
-// invece che su EventRecord/EventStatus di log.jsonl).
+// Sec. 6.7 - groups by id, so a pending START+END pair ends up on a single
+// row with the duration, as in the document's example (same pairing logic
+// already written for /log in EventAggregator, rewritten here because it
+// operates on NotificationRecord/NotifyStatus - sec. 7.2 - instead of
+// log.jsonl's EventRecord/EventStatus).
 std::string buildAggregatedMessageText(const std::vector<NotificationRecord>& pending,
                                         const UserConfig& userCfg) {
   struct Group {
@@ -79,7 +79,7 @@ std::string buildAggregatedMessageText(const std::vector<NotificationRecord>& pe
     const NotificationRecord* instant = nullptr;
   };
 
-  std::vector<std::string> order;  // prima apparizione, per un rendering stabile
+  std::vector<std::string> order;  // first appearance, for stable rendering
   std::map<std::string, Group> groups;
 
   for (const auto& rec : pending) {
@@ -133,22 +133,22 @@ std::string buildAggregatedMessageText(const std::vector<NotificationRecord>& pe
 
 void writeNotificationState(const OutboundMessage& msg, NotifyState state, uint32_t n,
                              uint32_t nowEpoch) {
-  // Sez. 9.4 - in modalita' degradata (spazio >= 95%) le scritture non
-  // essenziali (righe PENDING) vengono sospese; il log eventi resta prioritario.
+  // Sec. 9.4 - in degraded mode (space >= 95%) non-essential writes
+  // (PENDING rows) are suspended; the event log keeps write priority.
   if (state == NotifyState::PENDING && isFilesystemDegraded()) return;
 
   NotificationRecord rec{};
   memcpy(rec.id, msg.eventId, 32);
   rec.id[32] = '\0';
   rec.status = msg.notifyStatus;
-  rec.ts = (state == NotifyState::PENDING) ? msg.eventTs : nowEpoch;  // sez. 7.2
+  rec.ts = (state == NotifyState::PENDING) ? msg.eventTs : nowEpoch;  // sec. 7.2
   rec.state = state;
   rec.n = n;
   appendNotificationRecord(msg.chatId, rec);
 }
 
-// Ritorna true se questo esito deve scatenare una scansione anticipata
-// (sez. 6.3): solo un successo nel flusso normale, mai durante una scansione.
+// Returns true if this outcome should trigger an early scan (sec. 6.3):
+// only a success in the normal flow, never during a scan.
 bool handleSendOutcome(const std::vector<AuthorizedUser>& users, const OutboundMessage& msg,
                         SendOutcomeCategory outcome, uint32_t nowMillis, uint32_t nowEpoch) {
   bool triggerScan = false;
@@ -156,7 +156,7 @@ bool handleSendOutcome(const std::vector<AuthorizedUser>& users, const OutboundM
 
   if (msg.trackDelivery) {
     if (outcome == SendOutcomeCategory::SUCCESS) {
-      // Sez. 7.2 - nessuna riga se il successo e' al primo (e unico) tentativo.
+      // Sec. 7.2 - no row if the success is on the first (and only) attempt.
       if (msg.attemptCountBefore > 0) {
         writeNotificationState(msg, NotifyState::RESOLVED, 0, nowEpoch);
       }
@@ -219,10 +219,10 @@ void notifyEvent(const std::vector<AuthorizedUser>& users, const char* id, Event
   loadAllUserConfigs(userConfigs);
 
   for (const auto& user : users) {
-    if (user.addedTs > eventTs) continue;  // sez. 4.6
+    if (user.addedTs > eventTs) continue;  // sec. 4.6
 
     UserConfig userCfg = findOrDefaultUserConfig(userConfigs, user.chatId);
-    if (!isNotifyEnabledForUser(userCfg, type)) continue;  // sez. 11.2
+    if (!isNotifyEnabledForUser(userCfg, type)) continue;  // sec. 11.2
 
     std::string formattedTs = formatTimestampForUser(eventTs, userCfg, eventApprox);
 
@@ -240,7 +240,7 @@ void notifyEvent(const std::vector<AuthorizedUser>& users, const char* id, Event
 
 void runRecoveryScan(const std::vector<AuthorizedUser>& users, uint32_t nowMillis,
                       uint32_t nowEpoch) {
-  if (g_retryTimer.scanInProgress()) return;  // sez. 6.3.1 - richiesta scartata
+  if (g_retryTimer.scanInProgress()) return;  // sec. 6.3.1 - request discarded
 
   std::vector<UserConfig> userConfigs;
   loadAllUserConfigs(userConfigs);
@@ -254,7 +254,7 @@ void runRecoveryScan(const std::vector<AuthorizedUser>& users, uint32_t nowMilli
     UserConfig userCfg = findOrDefaultUserConfig(userConfigs, user.chatId);
 
     if (shouldAggregate(pending.size(), globalConfig().aggregateThreshold)) {
-      // Sez. 6.7 - un unico messaggio; il tracciamento resta individuale per voce.
+      // Sec. 6.7 - a single message; tracking stays individual per entry.
       std::string text = buildAggregatedMessageText(pending, userCfg);
       for (const auto& rec : pending) {
         OutboundMessage msg;
@@ -272,7 +272,7 @@ void runRecoveryScan(const std::vector<AuthorizedUser>& users, uint32_t nowMilli
       for (const auto& rec : pending) {
         EventRecord original{};
         bool found = findEventRecordById(rec.id, notifyStatusToEventStatus(rec.status), original);
-        bool approx = found ? original.approx : true;  // non trovato -> prudenza
+        bool approx = found ? original.approx : true;  // not found -> err on the side of caution
         const char* label = "Evento";
         if (found) {
           const EventTypeConfig* cfg = findEventTypeConfig(original.type);
@@ -296,7 +296,7 @@ void runRecoveryScan(const std::vector<AuthorizedUser>& users, uint32_t nowMilli
     }
   }
 
-  if (scanMessages.empty()) return;  // niente da recuperare: il timer resta com'era
+  if (scanMessages.empty()) return;  // nothing to recover: the timer stays as-is
 
   g_retryTimer.beginScan();
   g_scanMessagesInFlight = static_cast<uint32_t>(scanMessages.size());

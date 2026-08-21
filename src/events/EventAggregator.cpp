@@ -22,7 +22,7 @@ void AggregatedEventLog::observe(const EventRecord& rec) {
     pushNew(rec, /*isInstant=*/true);
   } else {  // END
     auto it = idToIter_.find(std::string(rec.id));
-    if (it == idToIter_.end()) return;  // START gia' scartato dal ring, ignorata
+    if (it == idToIter_.end()) return;  // START already evicted from the ring, ignored
 
     it->second->hasEnd = true;
     it->second->endTs = rec.ts;

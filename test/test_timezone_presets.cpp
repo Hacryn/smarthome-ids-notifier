@@ -17,7 +17,7 @@ static void test_find_by_preset() {
 static void test_rome_and_berlin_share_posix_string() {
   const TimezonePresetInfo* rome = findTimezonePreset(TimezonePreset::EUROPE_ROME);
   const TimezonePresetInfo* berlin = findTimezonePreset(TimezonePreset::EUROPE_BERLIN);
-  assert(strcmp(rome->posixTz, berlin->posixTz) == 0);  // sez. 10.1 - stesso fuso, stesse regole DST
+  assert(strcmp(rome->posixTz, berlin->posixTz) == 0);  // sec. 10.1 - same timezone, same DST rules
 }
 
 static void test_find_by_name() {
@@ -42,6 +42,6 @@ int main() {
   test_find_by_name();
   test_all_presets_have_distinct_names();
 
-  printf("test_timezone_presets: tutti i test superati\n");
+  printf("test_timezone_presets: all tests passed\n");
   return 0;
 }

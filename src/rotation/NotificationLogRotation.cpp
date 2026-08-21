@@ -9,11 +9,11 @@
 #include "FsErrorCounter.h"
 
 bool rotateNotificationLog(int64_t chatId, uint32_t cutoff) {
-  auto state = loadNotificationState(chatId);  // fold completo (sez. 7.2)
+  auto state = loadNotificationState(chatId);  // full fold (sec. 7.2)
 
   std::string path = notificationLogPath(chatId);
   File src = LittleFS.open(path.c_str(), "r");
-  if (!src) return true;  // niente da ruotare
+  if (!src) return true;  // nothing to rotate
 
   std::string tmpPath = path + ".tmp";
   File tmp = LittleFS.open(tmpPath.c_str(), "w");
