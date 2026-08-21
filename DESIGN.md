@@ -49,7 +49,7 @@ La scelta tra le due modalità dipende dal modello specifico di centralina e dal
 | Componente | Responsabilità |
 |---|---|
 | Lettura pin allarme (ISR + coda) | Rilevamento delle transizioni via interrupt, con debounce e datazione differita (sezione 3.3) |
-| Client Telegram (UniversalTelegramBot) | Invio notifiche, ricezione comandi e callback dei bottoni inline |
+| Client Telegram (FastBot2) | Invio notifiche, ricezione comandi e callback dei bottoni inline; espone nativamente l'esito strutturato di ogni invio (sezione 3.5, 6.5) |
 | Sincronizzazione NTP + gestione timezone | Ottenimento timestamp reali (epoch Unix, UTC) e conversione in ora locale con gestione automatica dell'ora legale |
 | Ancora oraria persistente (NVS) | Mantenimento di un riferimento temporale utilizzabile prima della sincronizzazione NTP (sezione 5.4) |
 | Gestione connettività e riconnessione | Backoff esponenziale, rilevamento della condizione `NETWORK_ISSUE` (sezione 3.4) |
@@ -69,12 +69,12 @@ Il sistema deve supportare più tipologie di evento, estensibili in futuro. Ogni
 
 | Valore enum `type` | Tipologia | Natura | Notifica inviata |
 |---|---|---|---|
-| `0` | `REBOOT` — riavvio dell'Arduino | Istantaneo (`INSTANT`) | `INSTANT` |
-| `1` | `POWER_LOSS` — interruzione di corrente (mancanza rete 230V) | Con durata (`START`/`END`) | `START` e `END` |
-| `2` | `NETWORK_ISSUE` — problema di connettività di rete | Con durata (`START`/`END`) | **solo `END`** (vedi 3.2.3) |
-| `10` | `ALARM_GENERAL` — allarme generale | Con durata (`START`/`END`) | `START` e `END` |
-| `11` | `ALARM_INTERNAL` — allarme interno | Con durata (`START`/`END`) | `START` e `END` |
-| `12` | `ALARM_GARAGE` — allarme garage | Con durata (`START`/`END`) | `START` e `END` |
+| `0` | `ALARM_GENERAL` — allarme generale | Con durata (`START`/`END`) | `START` e `END` |
+| `1` | `ALARM_INTERNAL` — allarme interno | Con durata (`START`/`END`) | `START` e `END` |
+| `2` | `ALARM_GARAGE` — allarme garage | Con durata (`START`/`END`) | `START` e `END` |
+| `3` | `POWER_LOSS` — interruzione di corrente (mancanza rete 230V) | Con durata (`START`/`END`) | `START` e `END` |
+| `4` | `REBOOT` — riavvio dell'Arduino | Istantaneo (`INSTANT`) | `INSTANT` |
+| `5` | `NETWORK_ISSUE` — problema di connettività di rete | Con durata (`START`/`END`) | **solo `END`** (vedi 3.2.3) |
 
 *(altre tipologie aggiungibili in coda alla enumerazione, senza rompere la compatibilità con i log esistenti — non riutilizzare/rinumerare valori già assegnati)*
 
@@ -173,6 +173,30 @@ I tentativi di riconnessione seguono un **backoff esponenziale con tetto**, per 
 - Ogni 10 tentativi consecutivi falliti viene tentato un ciclo completo `WiFi.disconnect()` + `WiFi.begin()`, per recuperare gli stati anomali dello stack WiFi che una semplice `reconnect()` non risolve.
 - Il tetto di 300 s garantisce che, a rete ripristinata, il ritardo massimo di rilevamento sia di 5 minuti; la sincronizzazione NTP e la scansione di recupero notifiche (sezione 6.2) seguono immediatamente il rientro.
 
+### 3.5 Libreria client Telegram (FastBot2)
+
+**Libreria scelta: FastBot2** (GyverLibs), al posto di UniversalTelegramBot valutata in una prima stesura del documento. Il motivo della scelta è specifico al punto 6.5: `sendMessage()` **ritorna direttamente un oggetto `fb::Result`**, non un semplice `bool`, con accesso diretto ai campi della risposta Telegram (`isError()`, `getErrorCode()`, `getError()`, e il parser interno per `parameters.retry_after`) — la classificazione degli esiti di invio richiesta da 6.5 è quindi ottenibile con l'API pubblica della libreria, senza wrapper né modifiche locali.
+
+#### 3.5.1 Modalità di polling
+
+FastBot2 offre tre modalità (`bot.setPollMode(...)`), selezionabili con un trade-off diretto tra reattività e blocco del loop:
+
+| Modalità | Comportamento |
+|---|---|
+| `Sync` (default) | `tick()` attende la risposta al proprio interno; con rete degradata può bloccare fino al timeout configurato |
+| `Async` | `tick()` non attende la risposta di polling, ma un invio richiesto **mentre è in corso un polling** forza una riconnessione bloccante di ~1 s |
+| `Long` | Long polling asincrono (timeout consigliato ≥ 20 s); gli aggiornamenti arrivano non appena disponibili. Un invio richiesto durante il polling ha lo stesso costo di riconnessione di `Async` |
+
+**Modalità adottata: `Long`**, con timeout 60 s, per la consegna più rapida dei comandi in arrivo. La libreria espone `isPolling()` per sapere se un ciclo di long-poll è in corso; l'invio da fuori dal gestore di aggiornamento (`onUpdate`) — che è esattamente il caso delle notifiche generate dagli eventi rilevati sui pin, asincrone rispetto al ciclo Telegram — **può quindi incorrere nel blocco di ~1 s per la riconnessione**, indipendentemente dalla modalità scelta.
+
+Questo non introduce un requisito nuovo: è esattamente il tipo di blocco di rete già assunto come possibile in sezione 3.3, coperto dall'architettura ISR + coda + datazione retroattiva. Nessuna transizione sui pin viene persa per effetto di questo blocco, e il watchdog (30 s) resta ampiamente al di sopra del caso peggiore (~1 s).
+
+#### 3.5.2 Convivenza con ArduinoJson
+
+FastBot2 usa internamente **GSON** (dello stesso autore) per il parsing delle risposte dell'API Telegram — una dipendenza propria della libreria, non una scelta del progetto. **ArduinoJson resta la libreria usata per tutti i file del progetto** (`users.json`, `userconfig.json`, righe di `log.jsonl` e di `notif_<chat_id>.jsonl`, sezioni 4.4, 5.2, 7.2): è una decisione esplicita, non un'omissione. Le due librerie sono indipendenti e non condividono buffer né tipi, quindi la coesistenza non comporta rischi; il costo è unicamente qualche KB aggiuntivo di flash per avere due parser JSON nel firmware, ritenuto accettabile rispetto al beneficio di non dover riscrivere la logica di lettura/scrittura dei file già specificata nel documento.
+
+**Nota sui `chat_id`**: FastBot2 rappresenta gli identificativi (`fb::ID`) internamente come stringa (buffer di 22 caratteri), costruibile esplicitamente da un intero a 64 bit (`long long`). Passare il `chat_id` come `int64_t` nativo (mai tramite un tipo a 32 bit intermedio) evita quindi qualunque troncamento anche sul lato Telegram della catena; il requisito `int64_t` di sezione 4.2 resta comunque necessario per la parte del sistema scritta con ArduinoJson (whitelist, configurazioni), dove il rischio di troncamento è reale.
+
 ---
 
 ## 4. Gestione utenti, permessi e sicurezza
@@ -236,7 +260,7 @@ Esempio indicativo di `users.json`:
 
 ### 4.6 Filtro degli eventi precedenti all'aggiunta di un utente
 
-Per evitare che un nuovo utente, appena aggiunto alla whitelist, riceva un invio massivo di tutte le notifiche storiche pregresse, si usa il campo `added_ts` già presente in `users.json` come filtro: qualunque evento con timestamp di origine antecedente ad `added_ts` viene **escluso** dall'invio delle notifiche per quell'utente, sia nel flusso normale sia in fase di recupero. Il `/log` storico resta comunque interamente consultabile da chiunque sia autorizzato, indipendentemente da questa data.
+**Proposta (non ancora confermata)**: per evitare che un nuovo utente, appena aggiunto alla whitelist, riceva un invio massivo di tutte le notifiche storiche pregresse, si usa il campo `added_ts` già presente in `users.json` come filtro: qualunque evento con timestamp di origine antecedente ad `added_ts` viene **escluso** dall'invio delle notifiche per quell'utente, sia nel flusso normale sia in fase di recupero. Il `/log` storico resta comunque interamente consultabile da chiunque sia autorizzato, indipendentemente da questa data.
 
 ### 4.7 Gestione dei segreti
 
@@ -393,7 +417,29 @@ Non tutti i fallimenti meritano un retry: alcune risposte dell'API indicano una 
 
 **Limite ai tentativi transitori**: una notifica che accumula più di `max_retries` tentativi falliti (default: **24**, pari a 24 ore con l'intervallo di retry di default) viene marcata `ABANDONED` e segnalata nel riepilogo, per evitare che un pendente irrisolvibile resti protetto dalla rotazione indefinitamente.
 
-**Nota implementativa**: `UniversalTelegramBot::sendMessage()` restituisce un semplice `bool` che accorpa indistintamente tutte queste condizioni. Per applicare la classificazione è necessario accedere allo **status code HTTP e al corpo della risposta** (campi `ok`, `error_code`, `description`, `parameters.retry_after`). Questo richiede o un wrapper attorno all'oggetto `WiFiClientSecure`/`HTTPClient` sottostante, o una piccola modifica locale alla libreria. La scelta va fatta in fase di implementazione, ma **la classificazione non è opzionale**: senza di essa i punti 6.3 e 6.5 non sono realizzabili.
+**Nota implementativa (FastBot2)**: a differenza delle librerie che restituiscono un semplice `bool`, `bot.sendMessage(msg)` di FastBot2 (sezione 3.5) **ritorna direttamente un `fb::Result`**, che espone tutto il necessario per la classificazione senza wrapper né modifiche alla libreria:
+
+```cpp
+fb::Result r = bot.sendMessage(msg);
+
+if (!r.isError()) {
+    // Successo: "ok": true nel corpo
+} else if (r.isEmpty()) {
+    // Nessun corpo JSON ricevuto: fallimento di connessione (DNS/TCP/TLS/timeout)
+    // -> Transitorio - rete
+} else {
+    // Corpo JSON con "ok": false: r.getErrorCode() e r.getError() rispecchiano
+    // esattamente error_code/description restituiti da Telegram
+    int code = r.getErrorCode().toInt32();
+    // 403/400 -> Permanente - destinatario
+    // 401/404 -> Errore di sistema
+    // 429     -> Throttling; retry_after tramite il parser interno:
+    uint32_t retryAfter = r._parser["parameters"]["retry_after"];
+    // 5xx     -> Transitorio - server
+}
+```
+
+Il campo `error_code` restituito nel corpo JSON da Telegram **coincide numericamente** con lo status HTTP della richiesta (è la stessa convenzione usata dalla Bot API), quindi la tabella sopra si applica invariata leggendo `getErrorCode()` al posto dello status HTTP. La distinzione "nessun corpo JSON" (fallimento di connessione, `isEmpty()`) rispetto a "corpo JSON con errore" (`isError()` con `error_code` valorizzato) è ciò che separa i fallimenti transitori di rete da quelli riportati esplicitamente dall'API.
 
 ### 6.6 Rate limiting
 
@@ -428,9 +474,9 @@ Lo scopo del registro è tracciare **se il messaggio è stato inviato con succes
 
   | Valore | Significato |
   |---|---|
-  | `0` | `NOTIFIED_INSTANT` |
-  | `1` | `NOTIFIED_START` |
-  | `2` | `NOTIFIED_END` |
+  | `0` | `NOTIFIED_START` |
+  | `1` | `NOTIFIED_END` |
+  | `2` | `NOTIFIED_INSTANT` |
 
 - **`ts`**: per una riga `PENDING`, l'epoch dell'evento originale (utile per il calcolo del grace period); per una riga `RESOLVED`, l'epoch del momento dell'invio effettivo andato a buon fine; per una riga `ABANDONED`, l'epoch della rinuncia.
 - **`state`**: enum numerico:
@@ -531,14 +577,14 @@ Se un evento con durata (es. `ALARM_GENERAL`, `ALARM_INTERNAL`, `ALARM_GARAGE`, 
 
 La chiusura manuale avviene **primariamente tramite bottoni inline** allegati al messaggio di riepilogo, per non richiedere all'utente di digitare un identificativo di 32 caratteri esadecimali da smartphone — operazione impraticabile, per giunta richiesta proprio nei momenti meno comodi.
 
-- Il messaggio di riepilogo inviato **agli admin** include una `inline_keyboard` con un bottone per ciascun evento aperto, etichettato in modo leggibile (es. `Chiudi: Allarme garage (14:02)`).
+- Il messaggio di riepilogo inviato **agli admin** include una tastiera inline (`fb::InlineKeyboard`, sezione 3.5) con un bottone per ciascun evento aperto, costruita dinamicamente in un ciclo (`addButton(label, data).newRow()` per ogni evento — il numero di eventi aperti non è fisso), etichettato in modo leggibile (es. `Chiudi: Allarme garage (14:02)`).
 - Il `callback_data` del bottone ha il formato `c:<id>` — 34 byte, entro il limite di 64 byte imposto da Telegram.
 - Il riepilogo inviato agli **utenti standard** è identico ma **privo di bottoni**: l'autorizzazione non è delegata alla sola invisibilità del comando.
-- Alla ricezione della callback query il sistema:
-  1. Rivaluta l'autorizzazione del mittente (`from_id` deve essere un admin in whitelist), **senza fidarsi del fatto che il bottone fosse visibile**: le callback possono essere inoltrate.
-  2. Verifica che l'evento indicato sia ancora aperto (protezione contro il doppio click e contro un secondo admin che ha già chiuso l'evento).
+- Alla ricezione della callback query (`u.isQuery()` nel gestore `onUpdate` di FastBot2) il sistema:
+  1. Rivaluta l'autorizzazione del mittente (`u.query().from().id()` deve essere un admin in whitelist), **senza fidarsi del fatto che il bottone fosse visibile**: le callback possono essere inoltrate.
+  2. Verifica che l'evento indicato (`u.query().data()`, parsando l'`id` dopo il prefisso `c:`) sia ancora aperto (protezione contro il doppio click e contro un secondo admin che ha già chiuso l'evento).
   3. Scrive la riga `END` con `ts` pari al momento del click e attiva il normale flusso di notifica per quell'`END`.
-  4. Risponde con `answerCallbackQuery` (obbligatorio per rimuovere lo spinner sul client) e aggiorna il messaggio rimuovendo il bottone consumato.
+  4. Risponde con `bot.answerCallbackQuery(u.query().id(), ...)` e aggiorna la tastiera del messaggio rimuovendo il bottone consumato (`bot.editMenu(...)`, ricostruendo la tastiera senza il bottone chiuso). **Nota**: se non si risponde esplicitamente alla query, FastBot2 invia comunque una risposta vuota automatica dopo un timeout — la chiamata esplicita resta comunque preferibile per dare un riscontro testuale immediato ("Evento chiuso") invece di lasciare lo spinner fino al timeout automatico.
 
 Resta disponibile come **fallback** il comando testuale `/closeevent <id> [timestamp]` (riservato agli admin), utile quando il messaggio di riepilogo non è più raggiungibile o quando si vuole specificare un timestamp di chiusura diverso dall'istante corrente. L'`id` completo è ottenibile da `/log`.
 
@@ -669,10 +715,10 @@ Chiavi NVS di servizio, non modificabili da comando: `schema_ver` (5.5), `last_e
 | `/setmaxretries <n>` | Admin | Imposta il numero di tentativi oltre il quale una notifica è abbandonata |
 | `/setnetthreshold <secondi>` | Admin | Imposta la durata minima di un down di connettività perché generi un evento |
 | `/closeevent <id> [timestamp]` | Admin | Chiude manualmente un evento rimasto aperto (fallback testuale dei bottoni inline, vedi 8.1) |
-| `/adduser <chat_id>` | Admin | Aggiunge un nuovo `chat_id` alla whitelist |
-| `/removeuser <chat_id>` | Admin | Rimuove un `chat_id` dalla whitelist |
-| `/promoteuser <chat_id>` | Admin | Promuove un utente da `Utente autorizzato` ad `Admin`  |
-| `/resetusers <chat_id>` | Admin | Svuota la whitelist di tutti gli utenti, tranne quelli hardcodati (operazione distruttiva, da proteggere con conferma) |
+| *Aggiunta utente* (nome comando da definire) | Admin | Aggiunge un nuovo `chat_id` alla whitelist |
+| *Rimozione utente* (nome comando da definire) | Admin | Rimuove un `chat_id` dalla whitelist |
+| *Promozione/rimozione admin* (nome comando da definire) | Admin | Modifica il flag `admin` di un utente esistente |
+| *Reset whitelist* (nome comando da definire) | Admin | Svuota la whitelist (operazione distruttiva, da proteggere con conferma) |
 
 ### 12.1 Rendering di `/log`
 
@@ -742,13 +788,16 @@ Allarme interno     19/08 08:30 → APERTO
 | Interruzione di corrente | Tipo `POWER_LOSS`, evento con durata (`START`/`END`), rilevato tramite PGM "guasto rete" della centralina |
 | Ottimizzazione storage | `type`, `status` (e `state` per le notifiche) come enum numerici invece di stringhe testuali; lo storage non è comunque un vincolo di progetto |
 | Formato id evento | UUID v4 in esadecimale senza trattini, 32 caratteri (invariato) |
-| Chiusura eventi aperti | **Bottoni inline** nel messaggio di riepilogo agli admin (`callback_data` `c:<id>`), con `/closeevent` come fallback testuale |
+| Chiusura eventi aperti | **Bottoni inline** (FastBot2 `InlineKeyboard`, costruita dinamicamente) nel messaggio di riepilogo agli admin (`callback_data` `c:<id>`), con `/closeevent` come fallback testuale |
 | Timestamp senza NTP | Ancora oraria in NVS salvata ogni 10 min; ricostruzione `last_epoch + millis()`; flag `a: 1` sulle righe approssimate |
 | Monotonicità timestamp | Clamp su `last_written_ts`, inizializzato al boot dall'ultima riga del log |
 | Versione di schema | Intero in NVS (`schema_ver`), verificato al boot; downgrade → modalità degradata senza toccare i dati |
 | Storage delle notifiche | **Proposta E adottata**: log inverso, un file per chat (`notif_<chat_id>.jsonl`); proposte A-D e F scartate ma documentate in 7.3 |
 | Semantica del tracciamento notifiche | Traccia l'accettazione da parte delle API Telegram, non la ricezione o lettura da parte dell'utente |
-| Esiti di invio | Classificati in successo / transitorio / throttling / permanente-destinatario / errore di sistema; retry solo sui transitori |
+| Client Telegram | **FastBot2** (non UniversalTelegramBot): `sendMessage()` ritorna un `fb::Result` con accesso diretto a `error_code`/`description`/`retry_after`, nessun wrapper necessario per la classificazione di sezione 6.5 |
+| Modalità di polling Telegram | `Long` (long polling asincrono, timeout 60 s); invio fuori dal gestore `onUpdate` può incorrere in ~1 s di blocco per riconnessione, coperto dall'architettura ISR + coda di 3.3 |
+| Libreria JSON | ArduinoJson per tutti i file del progetto (invariato); GSON usata solo internamente da FastBot2 per il parsing delle risposte Telegram — due librerie indipendenti, coesistenza per scelta |
+| Esiti di invio | Classificati in successo / transitorio / throttling / permanente-destinatario / errore di sistema; retry solo sui transitori; ottenuti da `fb::Result` senza wrapper |
 | Stato terminale delle notifiche | `ABANDONED` su errore permanente o superamento di `max_retries` (default 24), con contatore `n` nel record |
 | Rate limiting | Intervallo minimo di 1100 ms tra invii; `429` rispettato con `retry_after` e fino a 3 ritentativi immediati |
 | Notifiche recuperate entro il grace period (5 min default) | Inviate come notifiche normali, senza prefisso di "recupero" |
@@ -779,10 +828,11 @@ Allarme interno     19/08 08:30 → APERTO
 
 ## 15. Prossimi passi
 
+- Definire i nomi esatti e la sintassi dei comandi di gestione whitelist (aggiunta, rimozione, promozione, reset) e il meccanismo di conferma per il reset.
+- Confermare (o rivedere) il meccanismo `added_ts` per il filtro degli eventi precedenti all'aggiunta di un utente (sezione 4.6), incluso il comportamento per un evento il cui `START` precede `added_ts` ma il cui `END` lo segue.
 - Definire il valore di default per il periodo di retention del log eventi e notifiche.
 - Definire la lista dei preset di timezone da offrire e le relative stringhe POSIX.
 - Verificare che i pin scelti sul Nano ESP32 non siano strapping pin dell'ESP32-S3 (un livello LOW imposto da un optoisolatore al boot potrebbe impedire l'avvio) e valutare un pull-up esterno più robusto di quello interno per tratte di cablaggio lunghe verso la centralina.
-- Decidere come accedere allo status code e al corpo delle risposte Telegram (wrapper su `HTTPClient` o modifica locale della libreria), prerequisito per la classificazione degli esiti di sezione 6.5.
 - Valutare l'**aggregazione delle notifiche recuperate** in un unico messaggio riassuntivo quando superano una certa soglia numerica (es. *"⏪ 7 eventi durante l'assenza di rete tra le 14:02 e le 15:30"*), come ulteriore mitigazione del rate limiting e miglioramento della leggibilità.
 - Valutare (facoltativo, discusso separatamente) l'introduzione di comandi per inserire/disinserire l'allarme da remoto — richiede verifica di supporto hardware sulla centralina e un'attenta analisi di sicurezza aggiuntiva prima di essere formalizzato nel documento.
 - Implementazione dello sketch Arduino completo.
