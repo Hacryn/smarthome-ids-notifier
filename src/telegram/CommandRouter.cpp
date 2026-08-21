@@ -23,17 +23,16 @@
 #include "../rotation/FsErrorCounter.h"
 #include "../rotation/RotationEngine.h"
 #include "../rotation/RotationStorage.h"
-#include "../time/TimeAnchor.h"
+#include "../time/Clock.h"
 #include "../users/UserStorage.h"
 #include "CommandParser.h"
 
 namespace {
 
 std::vector<AuthorizedUser>* g_users = nullptr;
-uint32_t* g_lastEpochAnchor = nullptr;
 uint32_t* g_lastWrittenTs = nullptr;
 
-uint32_t nowEpoch() { return estimateTimestamp(*g_lastEpochAnchor, millis()); }
+uint32_t nowEpoch() { return currentEpoch(); }
 
 void reply(int64_t chatId, const std::string& text) { sendTelegramMessage(chatId, text.c_str()); }
 
@@ -241,8 +240,9 @@ void handleStatus(int64_t chatId) {
   }
   text += "\n";
 
-  text += "Sincronizzazione oraria: nessuna fonte NTP (non ancora implementata); orario stimato "
-          "dall'ancora NVS.\n";
+  text += "Sincronizzazione oraria: ";
+  text += isTimeSynced() ? "NTP sincronizzato" : "non sincronizzata, orario stimato dall'ancora NVS";
+  text += "\n";
 
   std::vector<OpenEvent> open = detectOpenEvents();
   text += "Eventi aperti: " + std::to_string(open.size()) + "\n";
@@ -319,10 +319,8 @@ void handleConfig(int64_t chatId, bool admin) {
 
 }  // namespace
 
-void initCommandRouter(std::vector<AuthorizedUser>& users, uint32_t& lastEpochAnchor,
-                        uint32_t& lastWrittenTs) {
+void initCommandRouter(std::vector<AuthorizedUser>& users, uint32_t& lastWrittenTs) {
   g_users = &users;
-  g_lastEpochAnchor = &lastEpochAnchor;
   g_lastWrittenTs = &lastWrittenTs;
 }
 

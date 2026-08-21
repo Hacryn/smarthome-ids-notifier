@@ -13,6 +13,7 @@
 #include "../notifications/NotificationPresentation.h"
 #include "../telegram/CallbackData.h"
 #include "../telegram/TelegramClient.h"
+#include "../time/Clock.h"
 #include "../time/TimeAnchor.h"
 #include "EventLogStorage.h"
 
@@ -54,7 +55,7 @@ bool closeOpenEvent(const std::vector<AuthorizedUser>& users, const std::string&
   rec.type = match->type;
   rec.status = EventStatus::END;
   rec.ts = clamped.ts;
-  rec.approx = true;  // sempre vero finche' non esiste una fonte NTP (fase successiva)
+  rec.approx = !isTimeSynced() || clamped.wasClamped;  // sez. 5.4.2/5.4.3
 
   if (!appendEventRecord(rec)) return false;
   lastWrittenTs = clamped.ts;

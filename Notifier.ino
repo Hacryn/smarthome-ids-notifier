@@ -18,6 +18,7 @@
 #include "src/telegram/CallbackData.h"
 #include "src/telegram/CommandRouter.h"
 #include "src/telegram/TelegramClient.h"
+#include "src/time/Clock.h"
 #include "src/time/TimeAnchor.h"
 #include "src/time/TimeAnchorStorage.h"
 #include "src/users/UserList.h"
@@ -30,9 +31,13 @@ constexpr uint32_t kMaintenanceIntervalMs = 10UL * 60UL * 1000UL;
 // Sez. 3.3 - un debouncer per voce di EVENT_TYPES (le voci senza pin restano inutilizzate).
 PinDebouncer g_debouncers[EVENT_TYPES_COUNT];
 
-// Sez. 5.4 - stato temporale in RAM.
-uint32_t g_lastEpochAnchor = 0;
+// Sez. 5.4 - ultimo ts scritto nel log (monotonicita', sez. 5.4.3). L'ancora
+// oraria e lo stato di sincronizzazione NTP sono ora interamente in Clock.
 uint32_t g_lastWrittenTs = 0;
+
+// Sez. 13 - rileva il fronte "appena connesso" per (ri)avviare NTP ad ogni
+// connessione, non solo alla prima (sez. 13: "alla connessione e periodicamente").
+bool g_wifiWasConnected = false;
 
 NetworkIssueTracker g_networkIssueTracker;
 
@@ -68,8 +73,7 @@ void onTelegramCallback(const IncomingCallback& cb) {
   std::string id;
   if (!parseCloseEventCallbackData(cb.data, id)) return;
 
-  bool closed = closeOpenEvent(g_users, id, estimateTimestamp(g_lastEpochAnchor, millis()),
-                                g_lastWrittenTs);
+  bool closed = closeOpenEvent(g_users, id, currentEpoch(), g_lastWrittenTs);
   answerCallback(cb.queryId, closed ? "Evento chiuso" : "Evento gia' chiuso o non trovato");
 }
 
@@ -84,7 +88,9 @@ void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs) {
   rec.type = type;
   rec.status = status;
   rec.ts = clamped.ts;
-  rec.approx = true;  // sempre vero finche' non esiste una fonte NTP (fase successiva)
+  // Sez. 5.4.2/5.4.3 - approssimato se l'orario non e' sincronizzato via NTP,
+  // o se il clamp di monotonicita' e' intervenuto (indipendentemente da NTP).
+  rec.approx = !isTimeSynced() || clamped.wasClamped;
 
   if (appendEventRecord(rec)) {
     g_lastWrittenTs = clamped.ts;
@@ -120,10 +126,10 @@ void setup() {
     }
   }
 
-  // NOTA: nessuna sincronizzazione NTP in questa fase (arriva in una fase
-  // successiva). Fino ad allora l'unica fonte di tempo e' l'ancora NVS
-  // (sez. 5.4.1); ogni riga scritta e' quindi sempre marcata approssimata.
-  g_lastEpochAnchor = loadLastEpoch();
+  // Sez. 5.4.1 - carica l'ancora NVS: unica fonte di tempo finche' NTP non
+  // sincronizza (sotto, alla prima connessione WiFi); da quel momento ogni
+  // riga smette di essere marcata approssimata (sez. 5.4.2).
+  initClock();
   g_lastWrittenTs = readLastWrittenTimestamp();
 
   // Sez. 4.5 - onboarding: se users.json e' vuoto/assente, il chat_id di
@@ -131,7 +137,7 @@ void setup() {
   if (!loadUsers(g_users)) {
     Serial.println("Lettura users.json fallita");
   }
-  if (ensureOnboardingAdmin(g_users, ONBOARDING_CHAT_ID, estimateTimestamp(g_lastEpochAnchor, millis()))) {
+  if (ensureOnboardingAdmin(g_users, ONBOARDING_CHAT_ID, currentEpoch())) {
     if (!saveUsers(g_users)) {
       Serial.println("Scrittura users.json fallita");
     }
@@ -139,7 +145,7 @@ void setup() {
 
   // Sez. 3.2/13 - REBOOT reso visibile ad ogni avvio (istantaneo, sempre
   // notificato), incluso quello provocato dal watchdog qui sopra.
-  logAndNotifyEvent(EventType::REBOOT, EventStatus::INSTANT, estimateTimestamp(g_lastEpochAnchor, millis()));
+  logAndNotifyEvent(EventType::REBOOT, EventStatus::INSTANT, currentEpoch());
 
   // Sez. 9.3.2 - pulizia dei file temporanei residui di una rotazione
   // interrotta da un blackout.
@@ -151,7 +157,7 @@ void setup() {
   initPinMonitor();
   initWifi(WIFI_SSID, WIFI_PASSWORD);
   initTelegramClient(TELEGRAM_BOT_TOKEN);
-  initCommandRouter(g_users, g_lastEpochAnchor, g_lastWrittenTs);
+  initCommandRouter(g_users, g_lastWrittenTs);
   setTelegramUpdateHandlers(onTelegramCallback, handleIncomingCommand);
 }
 
@@ -159,7 +165,7 @@ void loop() {
   drainPinTransitions(handleRawTransition);
 
   uint32_t nowMillis = millis();
-  uint32_t epochNow = estimateTimestamp(g_lastEpochAnchor, nowMillis);
+  uint32_t epochNow = currentEpoch();
 
   for (size_t i = 0; i < EVENT_TYPES_COUNT; i++) {
     const EventTypeConfig& cfg = EVENT_TYPES[i];
@@ -174,11 +180,18 @@ void loop() {
   }
 
   tickWifi(nowMillis);
+  tickClock(nowMillis);
 
   // TODO (fase 6): la definizione di sez. 3.4.1 richiede anche la
   // raggiungibilita' delle API Telegram, non solo lo stato WiFi. Per ora
   // NETWORK_ISSUE si basa unicamente sullo stato della connessione WiFi.
   bool reachable = isWifiConnected();
+  if (reachable && !g_wifiWasConnected) {
+    // Sez. 13 - NTP alla connessione e ad ogni riconnessione, non solo alla prima.
+    beginNtpSync();
+  }
+  g_wifiWasConnected = reachable;
+
   NetworkIssueEvent netEv = g_networkIssueTracker.update(
       reachable, nowMillis, epochNow, globalConfig().networkIssueThresholdSec);
   if (netEv.kind == NetworkIssueEvent::Kind::STARTED) {

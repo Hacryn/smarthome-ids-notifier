@@ -14,8 +14,7 @@
 // Registra i riferimenti allo stato di sistema necessari all'esecuzione dei
 // comandi. Da chiamare una sola volta in setup(), prima di registrare
 // handleIncomingCommand come CommandHandler.
-void initCommandRouter(std::vector<AuthorizedUser>& users, uint32_t& lastEpochAnchor,
-                        uint32_t& lastWrittenTs);
+void initCommandRouter(std::vector<AuthorizedUser>& users, uint32_t& lastWrittenTs);
 
 // Sez. 4.2/12 - whitelist verificata qui (i mittenti non autorizzati
 // vengono ignorati silenziosamente); i comandi riservati agli admin
