@@ -7,12 +7,55 @@ namespace {
 FastBot2 g_bot;
 constexpr int kMaxThrottleRetries = 3;  // sez. 6.6
 
+CallbackHandler g_callbackHandler = nullptr;
+CommandHandler g_commandHandler = nullptr;
+
 SendOutcomeCategory classifyResult(fb::Result& r) {
   RawSendOutcome outcome;
   outcome.isError = r.isError();
   outcome.isEmpty = r.isEmpty();
   outcome.errorCode = (outcome.isError && !outcome.isEmpty) ? r.getErrorCode().toInt32() : 0;
   return classifySendOutcome(outcome);
+}
+
+// Sez. 6.6 - fino a 3 ritentativi immediati su 429 rispettando retry_after,
+// non contati come fallimento. Condiviso da tutte le varianti di invio.
+SendOutcomeCategory sendWithThrottleRetry(const fb::Message& msg) {
+  for (int attempt = 0; attempt < kMaxThrottleRetries; attempt++) {
+    fb::Result r = g_bot.sendMessage(msg);
+    SendOutcomeCategory category = classifyResult(r);
+
+    if (category != SendOutcomeCategory::THROTTLING) return category;
+
+    uint32_t retryAfterSec = r._parser["parameters"]["retry_after"];
+    delay(retryAfterSec * 1000UL);
+  }
+  // Terzo 429 consecutivo: passa al normale meccanismo di retry programmato.
+  return SendOutcomeCategory::THROTTLING;
+}
+
+void onUpdate(fb::Update& u) {
+  if (u.isQuery()) {
+    if (!g_callbackHandler) return;
+
+    IncomingCallback cb;
+    cb.fromChatId = u.query().from().id().toInt64();
+    String queryId = u.query().id();
+    String data = u.query().data();
+    cb.queryId = std::string(queryId.c_str());
+    cb.data = std::string(data.c_str());
+    g_callbackHandler(cb);
+  } else if (u.isMessage()) {
+    if (!g_commandHandler) return;
+
+    String text = u.message().text();
+    if (text.length() == 0 || text[0] != '/') return;  // solo comandi
+
+    IncomingCommand cmd;
+    cmd.chatId = u.message().chat().id().toInt64();
+    cmd.text = std::string(text.c_str());
+    g_commandHandler(cmd);
+  }
 }
 
 }  // namespace
@@ -23,15 +66,31 @@ void initTelegramClient(const char* token) {
 }
 
 SendOutcomeCategory sendTelegramMessage(int64_t chatId, const char* text) {
-  for (int attempt = 0; attempt < kMaxThrottleRetries; attempt++) {
-    fb::Result r = g_bot.sendMessage(fb::Message(text, fb::ID(static_cast<long long>(chatId))));
-    SendOutcomeCategory category = classifyResult(r);
+  fb::Message msg(text, fb::ID(static_cast<long long>(chatId)));
+  return sendWithThrottleRetry(msg);
+}
 
-    if (category != SendOutcomeCategory::THROTTLING) return category;
-
-    uint32_t retryAfterSec = r._parser["parameters"]["retry_after"];
-    delay(retryAfterSec * 1000UL);
+SendOutcomeCategory sendMessageWithButtons(int64_t chatId, const char* text,
+                                            const std::vector<InlineButton>& buttons) {
+  fb::InlineKeyboard kb;
+  for (const auto& b : buttons) {
+    kb.addButton(b.label.c_str(), b.callbackData.c_str());
+    kb.newRow();
   }
-  // Terzo 429 consecutivo: passa al normale meccanismo di retry programmato (fase 8).
-  return SendOutcomeCategory::THROTTLING;
+
+  fb::Message msg(text, fb::ID(static_cast<long long>(chatId)));
+  msg.setKeyboard(&kb);
+  return sendWithThrottleRetry(msg);
+}
+
+void setTelegramUpdateHandlers(CallbackHandler onCallback, CommandHandler onCommand) {
+  g_callbackHandler = onCallback;
+  g_commandHandler = onCommand;
+  g_bot.attachUpdate(onUpdate);
+}
+
+void tickTelegramUpdates() { g_bot.tick(); }
+
+void answerCallback(const std::string& queryId, const std::string& text) {
+  g_bot.answerCallbackQuery(queryId.c_str(), text.c_str());
 }

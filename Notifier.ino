@@ -5,11 +5,14 @@
 #include "src/events/EventLogStorage.h"
 #include "src/events/EventTiming.h"
 #include "src/events/EventTypes.h"
+#include "src/events/OpenEventsManager.h"
 #include "src/network/NetworkIssueTracker.h"
 #include "src/network/WifiManager.h"
 #include "src/notifications/NotificationEngine.h"
 #include "src/pins/PinDebounce.h"
 #include "src/pins/PinMonitor.h"
+#include "src/telegram/CallbackData.h"
+#include "src/telegram/CommandParser.h"
 #include "src/telegram/TelegramClient.h"
 #include "src/time/TimeAnchor.h"
 #include "src/time/TimeAnchorStorage.h"
@@ -32,11 +35,39 @@ NetworkIssueTracker g_networkIssueTracker;
 // Sez. 4 - whitelist utenti autorizzati.
 std::vector<AuthorizedUser> g_users;
 
-// Sez. 6.2 - scansione di recupero una tantum alla prima connessione WiFi (boot).
-bool g_bootRecoveryScanDone = false;
+// Sez. 6.2/8 - scansione di recupero e riepilogo eventi aperti, una tantum
+// alla prima connessione WiFi (boot).
+bool g_bootTasksDone = false;
 
 void handleRawTransition(const PinTransition& t) {
   g_debouncers[t.eventTypeIndex].onTransition(t.level, t.millisAtIsr);
+}
+
+// Sez. 8.1 punto 1 - l'autorizzazione va rivalutata al click, mai data per
+// acquisita dal fatto che il bottone fosse visibile.
+void onTelegramCallback(const IncomingCallback& cb) {
+  if (!isAdmin(g_users, cb.fromChatId)) return;
+
+  std::string id;
+  if (!parseCloseEventCallbackData(cb.data, id)) return;
+
+  bool closed = closeOpenEvent(g_users, id, estimateTimestamp(g_lastEpochAnchor, millis()),
+                                g_lastWrittenTs);
+  answerCallback(cb.queryId, closed ? "Evento chiuso" : "Evento gia' chiuso o non trovato");
+}
+
+// Sez. 8.1 - fallback testuale /closeevent, riservato agli admin (sez. 4.3).
+void onTelegramCommand(const IncomingCommand& cmd) {
+  if (!isAdmin(g_users, cmd.chatId)) return;
+
+  std::string id;
+  bool hasTs = false;
+  uint32_t ts = 0;
+  if (!parseCloseEventCommand(cmd.text, id, hasTs, ts)) return;
+
+  uint32_t closeTs = hasTs ? ts : estimateTimestamp(g_lastEpochAnchor, millis());
+  bool closed = closeOpenEvent(g_users, id, closeTs, g_lastWrittenTs);
+  sendTelegramMessage(cmd.chatId, closed ? "Evento chiuso" : "Evento gia' chiuso o non trovato");
 }
 
 void logNetworkIssueEvent(EventStatus status, uint32_t rawTs) {
@@ -86,6 +117,7 @@ void setup() {
   initPinMonitor();
   initWifi(WIFI_SSID, WIFI_PASSWORD);
   initTelegramClient(TELEGRAM_BOT_TOKEN);
+  setTelegramUpdateHandlers(onTelegramCallback, onTelegramCommand);
 }
 
 void loop() {
@@ -136,11 +168,14 @@ void loop() {
     runRecoveryScan(g_users, nowMillis, epochNow);
   }
 
-  if (!g_bootRecoveryScanDone && reachable) {
+  if (!g_bootTasksDone && reachable) {
     // Sez. 6.2 - scansione di recupero al boot, una tantum.
     runRecoveryScan(g_users, nowMillis, epochNow);
-    g_bootRecoveryScanDone = true;
+    // Sez. 8 - riepilogo degli eventi rimasti aperti da un riavvio precedente.
+    sendOpenEventsSummary(g_users);
+    g_bootTasksDone = true;
   }
 
   tickNotificationEngine(g_users, nowMillis, epochNow);
+  tickTelegramUpdates();
 }

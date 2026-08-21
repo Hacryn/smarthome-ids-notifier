@@ -25,3 +25,10 @@ bool shouldAggregate(size_t pendingCount, uint32_t threshold);
 // Sez. 6.5 - true se il conteggio tentativi, dopo l'incremento per il
 // fallimento corrente, supera il limite: la notifica va abbandonata.
 bool exceedsMaxRetries(uint32_t attemptCountAfterFailure, uint32_t maxRetries);
+
+// Sez. 7.2/8 - "un record PENDING che si avvicina a max_retries viene
+// segnalato nel riepilogo periodico insieme agli eventi aperti": il design
+// non specifica una soglia numerica, quindi ne fissiamo una esplicita qui
+// (ultimi 3 tentativi disponibili) come scelta documentata, non implicita.
+constexpr uint32_t kNearAbandonmentMargin = 3;
+bool isNearAbandonment(uint32_t n, uint32_t maxRetries);

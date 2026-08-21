@@ -39,6 +39,13 @@ static void test_exceeds_max_retries() {
   assert(exceedsMaxRetries(25, 24));
 }
 
+static void test_is_near_abandonment() {
+  assert(!isNearAbandonment(20, 24));  // 4 tentativi rimasti, sopra il margine
+  assert(isNearAbandonment(21, 24));   // 3 tentativi rimasti
+  assert(isNearAbandonment(24, 24));
+  assert(isNearAbandonment(2, 2));     // maxRetries sotto il margine: soglia = maxRetries stesso
+}
+
 static void test_retry_timer_starts_on_first_failure() {
   RetryTimer t;
   assert(!t.isDue(0));
@@ -102,6 +109,7 @@ int main() {
   test_approx_timestamp_always_recovered_regardless_of_gap();
   test_should_aggregate_threshold();
   test_exceeds_max_retries();
+  test_is_near_abandonment();
   test_retry_timer_starts_on_first_failure();
   test_retry_timer_resets_on_repeated_failure();
   test_normal_flow_success_triggers_scan_only_if_active();

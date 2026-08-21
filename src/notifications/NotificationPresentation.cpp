@@ -13,3 +13,8 @@ bool shouldAggregate(size_t pendingCount, uint32_t threshold) { return pendingCo
 bool exceedsMaxRetries(uint32_t attemptCountAfterFailure, uint32_t maxRetries) {
   return attemptCountAfterFailure > maxRetries;
 }
+
+bool isNearAbandonment(uint32_t n, uint32_t maxRetries) {
+  if (maxRetries < kNearAbandonmentMargin) return n >= maxRetries;
+  return n >= (maxRetries - kNearAbandonmentMargin);
+}
