@@ -1,7 +1,7 @@
 # Sistema di Monitoraggio Allarme Bentel con Notifiche Telegram
 ## Documento di Design, Requisiti e Specifiche Tecniche
 
-**Versione:** 0.9
+**Versione:** 0.10
 **Data:** Agosto 2026
 **Piattaforma target:** Arduino Nano ESP32
 
@@ -260,7 +260,7 @@ Esempio indicativo di `users.json`:
 
 ### 4.6 Filtro degli eventi precedenti all'aggiunta di un utente
 
-**Proposta (non ancora confermata)**: per evitare che un nuovo utente, appena aggiunto alla whitelist, riceva un invio massivo di tutte le notifiche storiche pregresse, si usa il campo `added_ts` già presente in `users.json` come filtro: qualunque evento con timestamp di origine antecedente ad `added_ts` viene **escluso** dall'invio delle notifiche per quell'utente, sia nel flusso normale sia in fase di recupero. Il `/log` storico resta comunque interamente consultabile da chiunque sia autorizzato, indipendentemente da questa data.
+Per evitare che un nuovo utente, appena aggiunto alla whitelist, riceva un invio massivo di tutte le notifiche storiche pregresse, si usa il campo `added_ts` già presente in `users.json` come filtro: qualunque evento con timestamp di origine antecedente ad `added_ts` viene **escluso** dall'invio delle notifiche per quell'utente, sia nel flusso normale sia in fase di recupero. Il `/log` storico resta comunque interamente consultabile da chiunque sia autorizzato, indipendentemente da questa data.
 
 ### 4.7 Gestione dei segreti
 
@@ -594,7 +594,7 @@ Resta disponibile come **fallback** il comando testuale `/closeevent <id> [times
 
 ### 9.1 Politica di retention
 
-- Il periodo di validità del log eventi è **configurabile in settimane** (default da definire), impostabile solo da utenti admin.
+- Il periodo di validità del log eventi è **configurabile in settimane** (default di 52), impostabile solo da utenti admin.
 - Gli eventi conclusi (con riga `END` o `INSTANT` presenti) più vecchi del periodo configurato vengono eliminati.
 - Gli eventi ancora aperti (senza `END`) sono **sempre protetti** dalla cancellazione, indipendentemente dall'età.
 - I file `notif_<chat_id>.jsonl` seguono la stessa politica di retention: righe `RESOLVED` e `ABANDONED` più vecchie del periodo configurato vengono rimosse in fase di rotazione; righe `PENDING` restano sempre protette (coerentemente con la protezione degli eventi aperti). Il passaggio ad `ABANDONED` previsto dalla sezione 6.5 garantisce che nessun pendente resti protetto indefinitamente.
@@ -679,7 +679,7 @@ Il fuso orario è una **preferenza personale** salvata in `userconfig.json` (sez
 
 | Parametro | Default | Comando |
 |---|---|---|
-| Periodo di validità log eventi e notifiche | Da definire | `/setretention <settimane>` |
+| Periodo di validità log eventi e notifiche | 52 settimane | `/setretention <settimane>` |
 | Grace period recupero notifiche | 5 minuti | `/setgraceperiod <minuti>` |
 | Intervallo retry programmato | 60 minuti | `/setretryinterval <minuti>` |
 | Numero massimo di tentativi prima della rinuncia | 24 | `/setmaxretries <n>` |
