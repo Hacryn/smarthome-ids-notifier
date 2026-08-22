@@ -47,10 +47,11 @@ The Nano ESP32's built-in RGB LED (discrete `LED_RED`/`LED_GREEN`/`LED_BLUE` GPI
 |---|---|
 | 🟢 Green (solid) | WiFi connected, NTP synced, no `ALARM_*`/`POWER_LOSS` event open. |
 | 🟡 Yellow (solid) | WiFi disconnected/backing off, or NTP not synced. |
-| 🔴 Red (blinking) | At least one `ALARM_*` or `POWER_LOSS` event currently open. |
+| 🔴 Red (blinking) | At least one `ALARM_*` or `POWER_LOSS` event currently open, WiFi/NTP otherwise fine. |
+| 🔴🟡 Red/yellow (alternating) | An `ALARM_*`/`POWER_LOSS` event is open **and** WiFi is disconnected or NTP isn't synced — distinguishable at a glance from a plain alarm, since the alarm color alone can't also carry the connectivity information. |
 | 🟣 Purple (solid) | LittleFS degraded mode (>95% full). |
 
-Priority when multiple conditions hold: alarm > degraded > network/time > ok. See [`src/diagnostics/StatusLedPolicy.h`](../src/diagnostics/StatusLedPolicy.h) for the exact rule and [architecture.md](architecture.md) for how it's driven from `loop()`.
+Priority when multiple conditions hold: alarm+network/time > alarm > degraded > network/time > ok. See [`src/diagnostics/StatusLedPolicy.h`](../src/diagnostics/StatusLedPolicy.h) for the exact rule and [architecture.md](architecture.md) for how it's driven from `loop()`.
 
 ## Toolchain
 

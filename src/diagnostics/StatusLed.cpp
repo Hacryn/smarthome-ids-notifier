@@ -38,5 +38,10 @@ void tickStatusLed(uint32_t nowMillis, StatusLedState state) {
       setColor(on, false, false);  // blinking red
       break;
     }
+    case StatusLedState::ALARM_AND_NETWORK_OR_TIME: {
+      bool showRed = (nowMillis / kBlinkIntervalMs) % 2 == 0;
+      setColor(true, !showRed, false);  // alternating red / yellow
+      break;
+    }
   }
 }
