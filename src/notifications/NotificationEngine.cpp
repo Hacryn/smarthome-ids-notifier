@@ -9,6 +9,7 @@
 #include "../config/TimestampFormatter.h"
 #include "../config/UserConfig.h"
 #include "../config/UserConfigStorage.h"
+#include "../diagnostics/SerialLog.h"
 #include "../events/EventAggregator.h"
 #include "../events/EventLogStorage.h"
 #include "../rotation/RotationEngine.h"
@@ -129,6 +130,24 @@ std::string buildAggregatedMessageText(const std::vector<NotificationRecord>& pe
     text += "\n";
   }
   return text;
+}
+
+const char* outcomeLabel(SendOutcomeCategory outcome) {
+  switch (outcome) {
+    case SendOutcomeCategory::SUCCESS:
+      return "success";
+    case SendOutcomeCategory::TRANSIENT_NETWORK:
+      return "transient_network";
+    case SendOutcomeCategory::TRANSIENT_SERVER:
+      return "transient_server";
+    case SendOutcomeCategory::THROTTLING:
+      return "throttling";
+    case SendOutcomeCategory::PERMANENT_RECIPIENT:
+      return "permanent_recipient";
+    case SendOutcomeCategory::SYSTEM_ERROR:
+      return "system_error";
+  }
+  return "unknown";
 }
 
 void writeNotificationState(const OutboundMessage& msg, NotifyState state, uint32_t n,
@@ -311,6 +330,8 @@ void tickNotificationEngine(const std::vector<AuthorizedUser>& users, uint32_t n
     g_queue.erase(g_queue.begin());
 
     SendOutcomeCategory outcome = sendTelegramMessage(msg.chatId, msg.text.c_str());
+    logInfo("Send outcome: chat_id=%lld outcome=%s", static_cast<long long>(msg.chatId),
+            outcomeLabel(outcome));
     bool triggerScan = handleSendOutcome(users, msg, outcome, nowMillis, nowEpoch);
 
     if (msg.isScanMessage && g_scanMessagesInFlight == 0 && g_retryTimer.scanInProgress()) {

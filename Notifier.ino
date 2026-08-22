@@ -2,6 +2,7 @@
 #include <esp_task_wdt.h>
 
 #include "secrets.h"
+#include "src/diagnostics/SerialLog.h"
 #include "src/config/GlobalConfigStorage.h"
 #include "src/events/EventId.h"
 #include "src/events/EventLogStorage.h"
@@ -231,6 +232,8 @@ void loop() {
 
     EventStatus status = resolvePinEventStatus(transition.level, cfg.active_low);
     uint32_t rawTs = computeRetroactiveTimestamp(epochNow, nowMillis, transition.millisAtIsr);
+    logInfo("Event detected: %s status=%d ts=%lu", cfg.label, static_cast<int>(status),
+            static_cast<unsigned long>(rawTs));
     logAndNotifyEvent(cfg.type, status, rawTs);
   }
 

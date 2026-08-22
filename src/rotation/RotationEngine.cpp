@@ -4,6 +4,7 @@
 
 #include <string>
 
+#include "../diagnostics/SerialLog.h"
 #include "../notifications/NotificationEngine.h"
 #include "../notifications/NotificationRecord.h"
 #include "EventLogRotation.h"
@@ -33,6 +34,7 @@ SpaceStatus readSpaceStatus() {
 void rotateEverything(const std::vector<AuthorizedUser>& users, uint32_t nowEpoch,
                        uint32_t retentionWeeks) {
   uint32_t cutoff = retentionCutoff(nowEpoch, retentionWeeks);
+  logInfo("Rotation starting: cutoff=%lu", static_cast<unsigned long>(cutoff));
 
   // Sec. 9.3.2 - the NVS timestamp advances only if the event log rotation
   // didn't fail; a failure on individual notification files doesn't block
@@ -45,6 +47,8 @@ void rotateEverything(const std::vector<AuthorizedUser>& users, uint32_t nowEpoc
   for (const auto& user : users) {
     rotateNotificationLog(user.chatId, cutoff);
   }
+
+  logInfo("Rotation finished: event log cycles=%d", cycles);
 }
 
 }  // namespace

@@ -4,6 +4,7 @@
 #include <time.h>
 
 #include "../config/GlobalConfigStorage.h"
+#include "../diagnostics/SerialLog.h"
 #include "ClockPolicy.h"
 #include "TimeAnchor.h"
 #include "TimeAnchorStorage.h"
@@ -30,6 +31,7 @@ void tickClock(uint32_t nowMillis) {
 
     g_synced = true;
     g_anchorEpoch = nowRaw;
+    logInfo("NTP synced: epoch=%lu", static_cast<unsigned long>(g_anchorEpoch));
     saveLastEpoch(g_anchorEpoch);  // sec. 5.4.1 - right after a successful sync
     g_lastAnchorPersistMillis = nowMillis;
     return;
@@ -50,6 +52,7 @@ uint32_t currentEpoch() {
     uint32_t nowRaw = static_cast<uint32_t>(time(nullptr));
     if (isEpochPlausible(nowRaw)) return nowRaw;
     g_synced = false;  // system time became implausible again (defensive, rare)
+    logWarn("NTP time became implausible again, falling back to NVS anchor");
   }
   return estimateTimestamp(g_anchorEpoch, millis());
 }

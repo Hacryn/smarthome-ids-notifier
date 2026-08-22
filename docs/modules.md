@@ -114,6 +114,14 @@ The whitelist.
 | `UserList.h/.cpp` | Pure | Whitelist operations (add/remove/promote/reset), onboarding, JSON (de)serialization. |
 | `UserStorage.h/.cpp` | Hardware | LittleFS I/O for `users.json`. |
 
+## `src/diagnostics/`
+
+Serial-monitor observability, no bearing on firmware logic.
+
+| File | Kind | Responsibility |
+|---|---|---|
+| `SerialLog.h/.cpp` | Hardware | `logInfo`/`logWarn`/`logErr` — timestamped `Serial.printf` wrappers, called from WiFi, Clock, event detection, notification sends, rotation, and command handling. Always active. |
+
 ## Dependency direction
 
 Roughly: `events` and `users` are the lowest layer (no dependency on anything else in `src/`); `time`, `network`, `telegram/{SendOutcomeClassifier,RateLimiter}` sit alongside them; `config` depends on `events` (for `EventType`); `notifications` depends on `events`, `config`, `telegram`, and `rotation` (for the degraded-mode write guard); `rotation` depends on `events` and `notifications`' storage layer; `telegram/CommandRouter` sits on top of nearly everything, being the command surface. There's one intentional two-way relationship between `notifications` and `rotation` (degraded mode suspends certain writes; rotation alerts go out through the notification engine) — both directions are confined to `.cpp` files including the other module's header, never header-to-header, so it doesn't create a circular include.

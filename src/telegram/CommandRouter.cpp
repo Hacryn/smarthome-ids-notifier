@@ -12,6 +12,7 @@
 #include "../config/TimezonePresets.h"
 #include "../config/UserConfig.h"
 #include "../config/UserConfigStorage.h"
+#include "../diagnostics/SerialLog.h"
 #include "../events/EventAggregator.h"
 #include "../events/EventLogStorage.h"
 #include "../events/OpenEventsManager.h"
@@ -331,9 +332,14 @@ void initCommandRouter(std::vector<AuthorizedUser>& users, uint32_t& lastWritten
 }
 
 void handleIncomingCommand(const IncomingCommand& cmd) {
-  if (g_users == nullptr || !isAuthorized(*g_users, cmd.chatId)) return;  // sec. 4.2
+  if (g_users == nullptr || !isAuthorized(*g_users, cmd.chatId)) {  // sec. 4.2
+    logWarn("Command rejected (not whitelisted): chat_id=%lld", static_cast<long long>(cmd.chatId));
+    return;
+  }
 
   bool admin = isAdmin(*g_users, cmd.chatId);
+  logInfo("Command received: chat_id=%lld admin=%d text=%s", static_cast<long long>(cmd.chatId),
+          admin, cmd.text.c_str());
 
   std::string id, strArg;
   bool hasTs = false, hasArg = false, boolArg = false;

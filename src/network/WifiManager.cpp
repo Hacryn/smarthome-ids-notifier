@@ -2,6 +2,7 @@
 
 #include <WiFi.h>
 
+#include "../diagnostics/SerialLog.h"
 #include "WifiBackoff.h"
 
 namespace {
@@ -23,6 +24,7 @@ void initWifi(const char* ssid, const char* password) {
 
 void tickWifi(uint32_t nowMillis) {
   if (WiFi.status() == WL_CONNECTED) {
+    if (g_attemptNumber != 0) logInfo("WiFi connected (SSID=%s)", WiFi.SSID().c_str());
     g_attemptNumber = 0;  // sec. 3.4.2 - the counter resets on a successful reconnection
     return;
   }
@@ -30,6 +32,7 @@ void tickWifi(uint32_t nowMillis) {
   if (static_cast<int32_t>(nowMillis - g_nextAttemptMillis) < 0) return;  // waiting on backoff
 
   g_attemptNumber++;
+  logWarn("WiFi disconnected, backoff attempt #%lu", static_cast<unsigned long>(g_attemptNumber));
   if (shouldForceFullReconnect(g_attemptNumber)) {
     WiFi.disconnect();
     WiFi.begin(g_ssid, g_password);
