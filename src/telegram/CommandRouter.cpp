@@ -12,6 +12,7 @@
 #include "../config/TimezonePresets.h"
 #include "../config/UserConfig.h"
 #include "../config/UserConfigStorage.h"
+#include "../config/Version.h"
 #include "../diagnostics/SerialLog.h"
 #include "../events/EventAggregator.h"
 #include "../events/EventLogStorage.h"
@@ -293,6 +294,7 @@ void handleConfig(int64_t chatId, bool admin) {
   const TimezonePresetInfo* tz = findTimezonePreset(cfg.timezone);
 
   std::string text = "La tua configurazione:\n";
+  text += "- Versione firmware: " + std::string(FIRMWARE_VERSION) + "\n";
   text += "- Formato data: " + cfg.dateFormat + "\n";
   text += "- Fuso orario: " + std::string(tz ? tz->name : "?") + "\n";
   text += "- Notifiche disabilitate: ";

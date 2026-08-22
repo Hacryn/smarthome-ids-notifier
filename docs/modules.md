@@ -104,6 +104,7 @@ Global and per-user configuration, plus timestamp formatting.
 | `UserConfigStorage.h/.cpp` | Hardware | LittleFS I/O for `userconfig.json`. |
 | `TimezonePresets.h` | Pure | The preset-name-to-POSIX-TZ-string table. |
 | `TimestampFormatter.h/.cpp` | Hardware | Formats an epoch per a user's timezone/date format (sets/restores the process-global `TZ` env var around the conversion — the only place in the firmware that touches it). |
+| `Version.h` | Pure | `FIRMWARE_VERSION` constant, shown in `/config`. Bumped by hand. |
 
 ## `src/users/`
 
