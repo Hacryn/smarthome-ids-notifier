@@ -30,12 +30,16 @@
 // Sec. 9 - periodic maintenance (space + rotation due), not on every loop cycle.
 constexpr uint32_t kMaintenanceIntervalMs = 10UL * 60UL * 1000UL;
 
-// Sec. 13 - max time to wait for a real NTP sync before REBOOT is
-// logged/notified with the estimated anchor, same as it is today. Well
-// under the 30s Task WDT (sec. 13) - 10s typically covers WiFi connect +
-// DNS + NTP round-trip even under non-ideal conditions, without stretching
-// a boot with WiFi already down (which still degrades to today's behavior).
-constexpr uint32_t kRebootNtpWaitTimeoutMs = 10000;
+// Sec. 13 - max time to wait for a real NTP sync before REBOOT is logged
+// with the estimated anchor as a fallback. The Task WDT (30s) is fed on
+// every iteration of waitForNtpSyncOrTimeout(), so it isn't a constraint on
+// this value: the real limit is just how much boot delay is acceptable when
+// WiFi is slow/unstable. 20s gives comfortable margin over the worst case
+// observed on real hardware (physical-button reset, ~11-12s for a first
+// stable association - see .findings/
+// reboot-real-timestamp-led-off-still-approx.md), while still being a
+// bounded wait with the same silent fallback if the timeout elapses.
+constexpr uint32_t kRebootNtpWaitTimeoutMs = 20000;
 
 // Sec. 3.3 - one debouncer per EVENT_TYPES entry (entries with no pin stay unused).
 PinDebouncer g_debouncers[EVENT_TYPES_COUNT];

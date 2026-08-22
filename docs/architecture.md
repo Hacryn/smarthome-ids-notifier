@@ -49,7 +49,7 @@ The ESP32 has no battery-backed RTC. `src/time/Clock.h` is the single source of 
 - Until the first sync succeeds, `currentEpoch()` falls back to `last_epoch_anchor + millis()/1000`, where the anchor is persisted to NVS every `anchorPersistIntervalMinutes` (admin-configurable, default 360 = 6 hours, via `/setanchorinterval`) while time is valid, and immediately after every successful sync. This is what lets a reboot during a network outage still produce plausible (if approximate) timestamps instead of dating everything to 1970.
 - Every event row carries an `approx` flag (`"a":1` in the JSON, rendered as a `~` prefix) whenever it wasn't derived from a live NTP-synced clock, or whenever [monotonicity clamping](data-model.md#monotonicity) had to correct it.
 
-`REBOOT` is a special case: `setup()` waits up to `kRebootNtpWaitTimeoutMs` (10 s) for a real NTP sync before logging/notifying the event, so it can carry a real timestamp instead of always being approximate — with the same fallback to the NVS anchor if the timeout elapses (WiFi down or slow).
+`REBOOT` is a special case: `setup()` waits up to `kRebootNtpWaitTimeoutMs` (20 s) for a real NTP sync before logging/notifying the event, so it can carry a real timestamp instead of always being approximate — with the same fallback to the NVS anchor if the timeout elapses (WiFi down or slow).
 
 ## Network: reachability beyond WiFi association
 
