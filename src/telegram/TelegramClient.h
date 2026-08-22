@@ -31,6 +31,12 @@ struct InlineButton {
 SendOutcomeCategory sendMessageWithButtons(int64_t chatId, const char* text,
                                             const std::vector<InlineButton>& buttons);
 
+// Sec. 14 - sends a message with HTML parse_mode (<b>, <code>). For static/
+// compile-time content only - no HTML escaping is done, so any dynamic
+// value embedded in html must already have its <, >, & escaped by the
+// caller. Same classification/retry as sendTelegramMessage.
+SendOutcomeCategory sendFormattedMessage(int64_t chatId, const std::string& html);
+
 // Sec. 12.3 - sends a LittleFS file as a Telegram document (raw dump, no
 // reformatting). Returns false if the file can't be opened or the send
 // fails (network/API), without distinguishing which - the caller only

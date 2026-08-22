@@ -14,6 +14,7 @@ Implemented in [`src/telegram/CommandRouter.cpp`](../src/telegram/CommandRouter.
 | `/setdateformat <format>` | Sets your own display date/time format — a literal `strftime()` pattern, e.g. `/setdateformat %d/%m/%Y %H:%M`. Everything after the command is taken verbatim. |
 | `/settimezone <preset>` | Sets your own timezone. `<preset>` is one of the names in [`src/config/TimezonePresets.h`](../src/config/TimezonePresets.h): `UTC` (default), `Europe/Rome`, `Europe/Berlin`, `Europe/London`, `Europe/Moscow`, `America/New_York`, `America/Los_Angeles`. |
 | `/notify <type> on\|off` | Enables/disables notifications for one event type, for you only — the event is still always written to the log. `<type>` is the type's `commandName` from `EVENT_TYPES`: `REBOOT`, `POWER_LOSS`, `NETWORK_ISSUE`, `ALARM_GENERAL`, `ALARM_INTERNAL`, `ALARM_GARAGE`. |
+| `/help` | Shows a paginated, HTML-formatted guide to every command available to the caller (just the user-level ones for a standard user, plus a grouped admin section for an admin). Content mirrors this page and must be kept in sync with it by hand — see [`src/telegram/CommandRouter.cpp`](../src/telegram/CommandRouter.cpp)'s `buildHelpBlocks`. |
 
 ## Admin only
 

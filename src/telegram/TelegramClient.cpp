@@ -89,6 +89,12 @@ SendOutcomeCategory sendMessageWithButtons(int64_t chatId, const char* text,
   return sendWithThrottleRetry(msg);
 }
 
+SendOutcomeCategory sendFormattedMessage(int64_t chatId, const std::string& html) {
+  fb::Message msg(html.c_str(), fb::ID(static_cast<long long>(chatId)));
+  msg.setModeHTML();
+  return sendWithThrottleRetry(msg);
+}
+
 bool sendDocumentFromFile(int64_t chatId, const std::string& path, const std::string& filename) {
   File f = LittleFS.open(path.c_str(), "r");
   if (!f) return false;

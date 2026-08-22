@@ -31,6 +31,7 @@
 #include "../time/Clock.h"
 #include "../users/UserStorage.h"
 #include "CommandParser.h"
+#include "HelpPaginator.h"
 #include "UnauthorizedRequestLog.h"
 
 namespace {
@@ -489,6 +490,85 @@ void handleConfig(int64_t chatId, bool admin) {
   reply(chatId, text);
 }
 
+// Sec. 14 - one HTML block per command: "<b>syntax</b>\ndescription\nEsempio:
+// <code>...</code>" (example line omitted when there's none). Placeholders
+// in syntax must already be &lt;/&gt;-escaped by the caller - this is
+// static compile-time content, so no runtime HTML escaping is done.
+std::string helpBlock(const char* syntax, const char* description, const char* example = nullptr) {
+  std::string text = "<b>" + std::string(syntax) + "</b>\n" + description;
+  if (example) text += "\nEsempio: <code>" + std::string(example) + "</code>";
+  return text;
+}
+
+// Sec. 14 - content mirrors docs/commands.md exactly (the single source of
+// truth); keep both in sync when a command is added/removed/changed.
+std::vector<std::string> buildHelpBlocks(bool admin) {
+  std::vector<std::string> blocks = {
+      helpBlock("/log [n]", "Mostra gli ultimi eventi registrati.", "/log 20"),
+      helpBlock("/status", "Stato del sistema: allarmi, rete, WiFi, storage."),
+      helpBlock("/config", "Mostra le tue preferenze e la configurazione."),
+      helpBlock("/setdateformat &lt;format&gt;", "Imposta il formato data/ora personale.",
+                "/setdateformat %d/%m/%Y %H:%M"),
+      helpBlock("/settimezone &lt;preset&gt;", "Imposta il tuo fuso orario.",
+                "/settimezone Europe/Rome"),
+      helpBlock("/notify &lt;type&gt; on|off",
+                "Abilita o disabilita le notifiche per un tipo di evento.",
+                "/notify ALARM_GARAGE off"),
+      helpBlock("/help", "Mostra questa guida ai comandi disponibili."),
+  };
+
+  if (!admin) return blocks;
+
+  blocks.push_back("<b>Gestione whitelist</b>");
+  blocks.push_back(
+      helpBlock("/adduser &lt;chat_id&gt;", "Aggiunge un utente alla whitelist.", "/adduser 123456789"));
+  blocks.push_back(helpBlock("/removeuser &lt;chat_id&gt;", "Rimuove un utente dalla whitelist."));
+  blocks.push_back(helpBlock("/promoteuser &lt;chat_id&gt;", "Promuove un utente ad admin."));
+  blocks.push_back(helpBlock("/listusers", "Elenca gli utenti autorizzati."));
+  blocks.push_back(helpBlock("/resetusers CONFERMA", "Svuota la whitelist (distruttivo)."));
+  blocks.push_back(helpBlock("/requests", "Mostra i tentativi di accesso non autorizzati."));
+
+  blocks.push_back("<b>Configurazione globale</b>");
+  blocks.push_back(
+      helpBlock("/setretention &lt;weeks&gt;", "Imposta la retention di log e notifiche."));
+  blocks.push_back(helpBlock("/setgraceperiod &lt;minutes&gt;",
+                              "Imposta il grace period di recupero notifiche."));
+  blocks.push_back(
+      helpBlock("/setretryinterval &lt;minutes&gt;", "Imposta l'intervallo tra i retry."));
+  blocks.push_back(helpBlock("/setmaxretries &lt;n&gt;",
+                              "Imposta i tentativi massimi prima dell'abbandono."));
+  blocks.push_back(
+      helpBlock("/setnetthreshold &lt;seconds&gt;", "Imposta la soglia per un problema di rete."));
+  blocks.push_back(
+      helpBlock("/setaggregatethreshold &lt;n&gt;", "Imposta la soglia di aggregazione notifiche."));
+  blocks.push_back(helpBlock("/setanchorinterval &lt;minutes&gt;",
+                              "Imposta l'intervallo di persistenza dell'ancora NTP."));
+
+  blocks.push_back("<b>Diagnostica e gestione dati</b>");
+  blocks.push_back(helpBlock("/closeevent &lt;id&gt; [timestamp]",
+                              "Chiude manualmente un evento aperto."));
+  blocks.push_back(helpBlock("/dump &lt;target&gt; [chat_id]",
+                              "Invia un file grezzo come documento (debug).", "/dump notif 123456789"));
+  blocks.push_back(helpBlock("/resetlog CONFERMA", "Svuota lo storico eventi (distruttivo)."));
+  blocks.push_back(helpBlock("/resetnotif &lt;chat_id&gt; CONFERMA",
+                              "Azzera lo stato notifiche di un utente (distruttivo)."));
+  blocks.push_back(helpBlock("/resetuserconfig &lt;chat_id&gt; CONFERMA",
+                              "Azzera le preferenze di un utente (distruttivo)."));
+
+  return blocks;
+}
+
+void handleHelp(int64_t chatId, bool admin) {
+  constexpr size_t kMaxPageBytes = 3500;  // margin under Telegram's 4096-char limit
+
+  std::vector<std::string> pages = paginateBlocks(buildHelpBlocks(admin), kMaxPageBytes);
+  for (size_t i = 0; i < pages.size(); i++) {
+    std::string header = "\xF0\x9F\x93\x96 Guida comandi \xE2\x80\x94 pagina " +
+                          std::to_string(i + 1) + "/" + std::to_string(pages.size()) + "\n\n";
+    sendFormattedMessage(chatId, header + pages[i]);
+  }
+}
+
 }  // namespace
 
 void initCommandRouter(std::vector<AuthorizedUser>& users, uint32_t& lastWrittenTs) {
@@ -574,6 +654,8 @@ void handleIncomingCommand(const IncomingCommand& cmd) {
     handleStatus(cmd.chatId);
   } else if (cmd.text == "/config") {
     handleConfig(cmd.chatId, admin);
+  } else if (cmd.text == "/help") {
+    handleHelp(cmd.chatId, admin);
   }
   // Unrecognized command: no reply (avoids noise on free-form text).
 }

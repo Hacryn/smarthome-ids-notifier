@@ -57,13 +57,14 @@ Everything that talks to the Telegram Bot API.
 
 | File | Kind | Responsibility |
 |---|---|---|
-| `TelegramClient.h/.cpp` | Hardware | Wraps FastBot2: outbound sends (plain, with inline keyboards, or a LittleFS file as a document via `sendDocumentFromFile`) with throttling retry, incoming update dispatch (callback queries and text commands) translated into plain structs so the rest of the firmware never needs FastBot2's types. |
+| `TelegramClient.h/.cpp` | Hardware | Wraps FastBot2: outbound sends (plain, HTML-formatted via `sendFormattedMessage`, with inline keyboards, or a LittleFS file as a document via `sendDocumentFromFile`) with throttling retry, incoming update dispatch (callback queries and text commands) translated into plain structs so the rest of the firmware never needs FastBot2's types. |
 | `SendOutcomeClassifier.h/.cpp` | Pure | Classifies a raw send result into success / transient (network or server) / throttling / permanent-recipient / system-error. |
 | `RateLimiter.h/.cpp` | Pure | Non-blocking minimum-interval gate between sends. |
 | `CommandRouter.h/.cpp` | Hardware | The command dispatcher: whitelist check, admin gating, and the implementation of every command in [commands.md](commands.md). |
 | `CommandParser.h/.cpp` | Pure | Text parsing for every command's arguments. |
 | `CallbackData.h/.cpp` | Pure | `callback_data` encoding/decoding for the inline "close event" buttons. |
 | `UnauthorizedRequestLog.h/.cpp` | Pure | Fixed-capacity (5), chat_id-deduped, in-RAM-only buffer of unauthorized command attempts, backing `/requests`. |
+| `HelpPaginator.h/.cpp` | Pure | Packs `/help`'s HTML command blocks into pages under Telegram's message-size limit, without splitting a single block. |
 
 ## `src/notifications/`
 
