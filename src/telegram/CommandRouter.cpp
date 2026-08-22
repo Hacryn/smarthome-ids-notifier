@@ -329,7 +329,8 @@ void handleStatus(int64_t chatId) {
   text += kUptimeEmoji;
   text += " Uptime: " + formatUptime(millis() / 1000) + ", causa ultimo riavvio: ";
   text += resetReasonText(esp_reset_reason());
-  text += "\n\n";
+  text += "\n";
+  text += "Versione firmware: " + std::string(FIRMWARE_VERSION) + "\n\n";
 
   text += kAlarmsEmoji;
   text += " Stato allarmi:\n";
@@ -416,7 +417,6 @@ void handleConfig(int64_t chatId, bool admin) {
   const TimezonePresetInfo* tz = findTimezonePreset(cfg.timezone);
 
   std::string text = "La tua configurazione:\n";
-  text += "- Versione firmware: " + std::string(FIRMWARE_VERSION) + "\n";
   text += "- Formato data: " + cfg.dateFormat + "\n";
   text += "- Fuso orario: " + std::string(tz ? tz->name : "?") + "\n";
   text += "- Notifiche disabilitate: ";
