@@ -332,6 +332,7 @@ constexpr const char* kUptimeEmoji = "\xF0\x9F\x95\x92";     // clock
 constexpr const char* kAlarmsEmoji = "\xF0\x9F\x9A\xA8";     // rotating light
 constexpr const char* kPowerEmoji = "\xF0\x9F\x94\x8C";      // plug
 constexpr const char* kWifiEmoji = "\xF0\x9F\x93\xB6";       // antenna bars
+constexpr const char* kTelegramReachEmoji = "\xF0\x9F\x93\xA1";  // satellite antenna
 constexpr const char* kNtpEmoji = "\xE2\x8F\xB1\xEF\xB8\x8F";  // stopwatch
 constexpr const char* kOpenEventsEmoji = "\xF0\x9F\x93\x82";  // open folder
 constexpr const char* kNotifEmoji = "\xF0\x9F\x94\x94";      // bell
@@ -397,6 +398,12 @@ void handleStatus(int64_t chatId) {
   } else {
     text += "disconnesso, tentativo di backoff #" + std::to_string(wifiCurrentBackoffAttempt());
   }
+  text += "\n\n";
+
+  text += kTelegramReachEmoji;
+  text += " Telegram: ";
+  text += isTelegramReachable() ? "raggiungibile"
+                                 : "non raggiungibile di recente (ultimi invii falliti per problemi di connessione)";
   text += "\n\n";
 
   text += kNtpEmoji;

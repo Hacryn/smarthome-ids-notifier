@@ -69,5 +69,9 @@ void setTelegramUpdateHandlers(CallbackHandler onCallback, CommandHandler onComm
 // sec. 3.5.1).
 void tickTelegramUpdates();
 
+// Sec. 3.4.1 - Telegram API reachability, deduced from the outcome of real
+// sends (see TelegramReachabilityTracker). Same pattern as isWifiConnected().
+bool isTelegramReachable();
+
 // Sec. 8.1 - immediate reply to the callback query (removes the spinner).
 void answerCallback(const std::string& queryId, const std::string& text);

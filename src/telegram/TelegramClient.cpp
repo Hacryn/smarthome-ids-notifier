@@ -3,10 +3,13 @@
 #include <LittleFS.h>  // must precede FastBot2.h so its FS_H-guarded fs::File overload is enabled
 #include <FastBot2.h>
 
+#include "../network/TelegramReachability.h"
+
 namespace {
 
 FastBot2 g_bot;
 constexpr int kMaxThrottleRetries = 3;  // sec. 6.6
+TelegramReachabilityTracker g_reachabilityTracker;
 
 CallbackHandler g_callbackHandler = nullptr;
 CommandHandler g_commandHandler = nullptr;
@@ -25,6 +28,7 @@ SendOutcomeCategory sendWithThrottleRetry(const fb::Message& msg) {
   for (int attempt = 0; attempt < kMaxThrottleRetries; attempt++) {
     fb::Result r = g_bot.sendMessage(msg);
     SendOutcomeCategory category = classifyResult(r);
+    g_reachabilityTracker.recordOutcome(category);
 
     if (category != SendOutcomeCategory::THROTTLING) return category;
 
@@ -113,6 +117,8 @@ void setTelegramUpdateHandlers(CallbackHandler onCallback, CommandHandler onComm
 }
 
 void tickTelegramUpdates() { g_bot.tick(); }
+
+bool isTelegramReachable() { return g_reachabilityTracker.reachable(); }
 
 void answerCallback(const std::string& queryId, const std::string& text) {
   g_bot.answerCallbackQuery(queryId.c_str(), text.c_str());

@@ -250,16 +250,19 @@ void loop() {
   tickWifi(nowMillis);
   tickClock(nowMillis);
 
-  // TODO (phase 6): the definition in sec. 3.4.1 also requires Telegram
-  // API reachability, not just WiFi status. For now NETWORK_ISSUE is based
-  // solely on WiFi connection state.
-  bool reachable = isWifiConnected();
-  if (reachable && !g_wifiWasConnected) {
+  bool wifiConnected = isWifiConnected();
+  if (wifiConnected && !g_wifiWasConnected) {
     // Sec. 13 - NTP on connection and on every reconnection, not just the first.
     beginNtpSync();
   }
-  g_wifiWasConnected = reachable;
+  g_wifiWasConnected = wifiConnected;
 
+  // Sec. 3.4.1 - NETWORK_ISSUE reachability combines WiFi connection state
+  // with real Telegram send outcomes: WiFi down is still the dominant
+  // signal (no send is possible either way), but WiFi up with Telegram
+  // unreachable (e.g. a router with no working internet uplink) is now
+  // caught too.
+  bool reachable = wifiConnected && isTelegramReachable();
   NetworkIssueEvent netEv = g_networkIssueTracker.update(
       reachable, nowMillis, epochNow, globalConfig().networkIssueThresholdSec);
   if (netEv.kind == NetworkIssueEvent::Kind::STARTED) {

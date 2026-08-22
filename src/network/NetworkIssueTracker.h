@@ -3,9 +3,10 @@
 #include <stdint.h>
 
 // Sec. 3.4.1 - pure state machine for NETWORK_ISSUE detection. Receives a
-// generic reachability signal (currently: WiFi status only; sec. 3.4.1
-// also requires Telegram API reachability, which will be combined here
-// once the client is introduced - phase 6).
+// generic reachability signal - the caller combines WiFi connection state
+// with Telegram API reachability (see TelegramReachabilityTracker) before
+// calling update(); this tracker itself doesn't know how the signal was
+// composed.
 struct NetworkIssueEvent {
   enum class Kind { NONE, STARTED, ENDED } kind = Kind::NONE;
   uint32_t ts = 0;              // detection instant (START) or restoration instant (END)

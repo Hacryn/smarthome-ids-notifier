@@ -49,7 +49,8 @@ WiFi connectivity and the `NETWORK_ISSUE` event.
 |---|---|---|
 | `WifiManager.h/.cpp` | Hardware | Non-blocking connect/reconnect with backoff; exposes SSID/RSSI/attempt count for `/status`. |
 | `WifiBackoff.h/.cpp` | Pure | The exponential backoff schedule (5 s → 300 s cap) and the "every 10th attempt, full reconnect cycle" rule. |
-| `NetworkIssueTracker.h/.cpp` | Pure | State machine deciding when a connectivity gap becomes a logged `NETWORK_ISSUE` (only after the configurable threshold, dating the `START` to when connectivity was actually lost, not when the threshold was crossed). |
+| `NetworkIssueTracker.h/.cpp` | Pure | State machine deciding when a connectivity gap becomes a logged `NETWORK_ISSUE` (only after the configurable threshold, dating the `START` to when connectivity was actually lost, not when the threshold was crossed). Receives a single `bool reachable` — doesn't care how it's composed. |
+| `TelegramReachability.h/.cpp` | Pure | Infers Telegram API reachability from the outcome of real sends (consecutive `TRANSIENT_NETWORK` classifications), no dedicated probe. Combined with `isWifiConnected()` to feed `NetworkIssueTracker`. |
 
 ## `src/telegram/`
 

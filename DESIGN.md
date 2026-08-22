@@ -143,9 +143,11 @@ For `NETWORK_ISSUE` purposes, what matters isn't WiFi status but **reachability 
 
 The network-issue condition is therefore defined as:
 
-> WiFi disconnected **or** failure of all calls to `api.telegram.org` (including ordinary polling `getUpdates`)
+> WiFi disconnected **or** failure of the most recent application-level calls to `api.telegram.org` (notification sends and command replies)
 
 sustained continuously for longer than the **configured threshold** (default: **120 seconds**, `/setnetthreshold`).
+
+Telegram reachability is inferred from the outcome of real sends (`TelegramReachabilityTracker`, section 6.5's `TRANSIENT_NETWORK` category) rather than from a dedicated probe or from the long-polling `getUpdates` cycle itself: FastBot2's own error hooks for the polling loop are marked for removal upstream, so nothing durable can be built on them. The practical consequence is that the signal only updates when an application-level send is actually attempted — during a period of pure silence (no event, no admin interaction) it won't refresh — but an alarm firing always attempts a send, which is exactly the case that matters.
 
 - The threshold exists so as not to generate events for micro-interruptions and router reboots, which typically recover within 60-90 seconds. Too low a value would fill the log with noise.
 - The `END` of `NETWORK_ISSUE` is logged on the **first successful call** to the API, with `ts` equal to that instant.
