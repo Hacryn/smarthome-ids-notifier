@@ -4,6 +4,8 @@
 
 #include "UserList.h"
 
+inline const char* kUsersPath = "/users.json";
+
 // Sec. 4.4 - persistence of users.json on LittleFS, rewritten in full on
 // every change with a write-then-rename pattern (sec. 9.3.2). Not testable
 // via the host-side harness (depends on real LittleFS).

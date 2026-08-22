@@ -57,7 +57,7 @@ Everything that talks to the Telegram Bot API.
 
 | File | Kind | Responsibility |
 |---|---|---|
-| `TelegramClient.h/.cpp` | Hardware | Wraps FastBot2: outbound sends (plain and with inline keyboards) with throttling retry, incoming update dispatch (callback queries and text commands) translated into plain structs so the rest of the firmware never needs FastBot2's types. |
+| `TelegramClient.h/.cpp` | Hardware | Wraps FastBot2: outbound sends (plain, with inline keyboards, or a LittleFS file as a document via `sendDocumentFromFile`) with throttling retry, incoming update dispatch (callback queries and text commands) translated into plain structs so the rest of the firmware never needs FastBot2's types. |
 | `SendOutcomeClassifier.h/.cpp` | Pure | Classifies a raw send result into success / transient (network or server) / throttling / permanent-recipient / system-error. |
 | `RateLimiter.h/.cpp` | Pure | Non-blocking minimum-interval gate between sends. |
 | `CommandRouter.h/.cpp` | Hardware | The command dispatcher: whitelist check, admin gating, and the implementation of every command in [commands.md](commands.md). |

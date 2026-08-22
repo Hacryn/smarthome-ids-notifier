@@ -5,7 +5,7 @@
 #include "../rotation/FsErrorCounter.h"
 
 namespace {
-const char* kPath = "/userconfig.json";
+const char* kPath = kUserConfigPath;
 const char* kTmpPath = "/userconfig.json.tmp";
 
 bool writeConfigsTmp(const std::string& json) {

@@ -31,6 +31,12 @@ struct InlineButton {
 SendOutcomeCategory sendMessageWithButtons(int64_t chatId, const char* text,
                                             const std::vector<InlineButton>& buttons);
 
+// Sec. 12.3 - sends a LittleFS file as a Telegram document (raw dump, no
+// reformatting). Returns false if the file can't be opened or the send
+// fails (network/API), without distinguishing which - the caller only
+// needs a yes/no to relay to the admin.
+bool sendDocumentFromFile(int64_t chatId, const std::string& path, const std::string& filename);
+
 // Sec. 8.1 - primitive types so FastBot2's own types don't leak outside
 // this module (Notifier.ino stays free of including FastBot2.h).
 struct IncomingCallback {

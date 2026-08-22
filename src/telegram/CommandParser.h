@@ -40,3 +40,20 @@ bool parseSetTimezoneCommand(const std::string& text, std::string& outPresetName
 // argument is absent hasArg is false and outN isn't set (the caller
 // applies the default).
 bool parseLogCommand(const std::string& text, bool& hasArg, uint32_t& outN);
+
+// Sec. 12.3 - "/dump <target> [chat_id]". outTarget is one of "log",
+// "notif", "userconfig", "users". outChatId/outHasChatId are only set (and
+// only required in the command text) for "notif" and "userconfig" - "log"
+// and "users" reject a trailing argument to avoid ambiguity.
+bool parseDumpCommand(const std::string& text, std::string& outTarget, int64_t& outChatId,
+                      bool& outHasChatId);
+
+// Sec. 12.3 - "/resetlog CONFERMA": destructive, same CONFERMA pattern as
+// /resetusers (no multi-step stateful flow).
+bool parseResetLogCommand(const std::string& text);
+
+// Sec. 12.3 - "/resetnotif <chat_id> CONFERMA".
+bool parseResetNotifCommand(const std::string& text, int64_t& outChatId);
+
+// Sec. 12.3 - "/resetuserconfig <chat_id> CONFERMA".
+bool parseResetUserConfigCommand(const std::string& text, int64_t& outChatId);

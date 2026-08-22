@@ -31,6 +31,10 @@ Implemented in [`src/telegram/CommandRouter.cpp`](../src/telegram/CommandRouter.
 | `/setnetthreshold <seconds>` | Minimum outage duration before a `NETWORK_ISSUE` event is logged. Default 120. |
 | `/setaggregatethreshold <n>` | Pending-notification count above which a recovery batch is sent as one aggregated message instead of one per event. Default 3. |
 | `/setanchorinterval <minutes>` | How often the NTP fallback time anchor is persisted to NVS while time is valid. Default 360 (6 hours). |
+| `/dump <target> [chat_id]` | Sends the raw target file as a Telegram document (debug dump, no reformatting). `<target>` is `log` (`log.jsonl`), `notif <chat_id>` (`notif_<chat_id>.jsonl`), `userconfig <chat_id>` (the whole `userconfig.json` — not filtered, it's already indexed by `chat_id` internally), or `users` (`users.json`). Replies with an error if the file doesn't exist yet or the send fails. |
+| `/resetlog CONFERMA` | **Destructive.** Deletes `log.jsonl` (event history), also resetting the in-memory monotonicity baseline. Same `CONFERMA`-in-message pattern as `/resetusers`. |
+| `/resetnotif <chat_id> CONFERMA` | **Destructive.** Deletes `notif_<chat_id>.jsonl` for the given user, clearing their pending/abandoned/retry state. |
+| `/resetuserconfig <chat_id> CONFERMA` | **Destructive.** Removes the given user's entry from `userconfig.json`, reverting them to the preference defaults. |
 
 All seven `/setXxx` global-config commands persist immediately to NVS and take effect on the next relevant check — no reboot required.
 

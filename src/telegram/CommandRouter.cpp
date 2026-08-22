@@ -4,6 +4,7 @@
 #include <LittleFS.h>
 #include <esp_system.h>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -21,6 +22,7 @@
 #include "../notifications/NotificationEngine.h"
 #include "../notifications/NotificationFolder.h"
 #include "../notifications/NotificationLogStorage.h"
+#include "../notifications/NotificationRecord.h"
 #include "../pins/PinMonitor.h"
 #include "../rotation/FilesystemHealth.h"
 #include "../rotation/FsErrorCounter.h"
@@ -128,6 +130,72 @@ void handleResetUsers(int64_t chatId, bool admin) {
   resetUsers(*g_users);
   saveUsers(*g_users);
   reply(chatId, "Whitelist azzerata. Al prossimo riavvio l'admin di secrets.h verra' ripristinato.");
+}
+
+// Sec. 12.3 - raw file dump for debugging, sent as a Telegram document.
+// target is one of "log"/"notif"/"userconfig"/"users", already validated
+// by CommandParser; targetChatId is only meaningful for "notif".
+void handleDump(int64_t chatId, bool admin, const std::string& target, int64_t targetChatId) {
+  if (!requireAdmin(chatId, admin)) return;
+
+  std::string path, filename;
+  if (target == "log") {
+    path = kEventLogPath;
+    filename = "log.jsonl";
+  } else if (target == "notif") {
+    path = notificationLogPath(targetChatId);
+    filename = "notif_" + std::to_string(targetChatId) + ".jsonl";
+  } else if (target == "userconfig") {
+    path = kUserConfigPath;
+    filename = "userconfig.json";
+  } else if (target == "users") {
+    path = kUsersPath;
+    filename = "users.json";
+  } else {
+    return;  // unreachable: CommandParser already validated the target
+  }
+
+  if (!LittleFS.exists(path.c_str())) {
+    reply(chatId, "File non trovato.");
+    return;
+  }
+  if (!sendDocumentFromFile(chatId, path, filename)) reply(chatId, "Invio del file fallito.");
+}
+
+// Sec. 12.3 - destructive resets, CONFERMA-protected (same pattern as
+// handleResetUsers below).
+void handleResetLog(int64_t chatId, bool admin) {
+  if (!requireAdmin(chatId, admin)) return;
+
+  bool removed = !LittleFS.exists(kEventLogPath) || LittleFS.remove(kEventLogPath);
+  if (removed) *g_lastWrittenTs = 0;  // sec. 5.4.3 - the clamp must forget the old baseline too
+  reply(chatId, removed ? "Storico eventi cancellato." : "Cancellazione fallita.");
+}
+
+void handleResetNotif(int64_t chatId, bool admin, int64_t targetChatId) {
+  if (!requireAdmin(chatId, admin)) return;
+
+  std::string path = notificationLogPath(targetChatId);
+  bool removed = !LittleFS.exists(path.c_str()) || LittleFS.remove(path.c_str());
+  reply(chatId,
+        removed ? "Stato notifiche azzerato per l'utente indicato." : "Cancellazione fallita.");
+}
+
+void handleResetUserConfig(int64_t chatId, bool admin, int64_t targetChatId) {
+  if (!requireAdmin(chatId, admin)) return;
+
+  std::vector<UserConfig> configs;
+  loadAllUserConfigs(configs);
+  size_t before = configs.size();
+  configs.erase(std::remove_if(configs.begin(), configs.end(),
+                                [&](const UserConfig& c) { return c.chatId == targetChatId; }),
+                configs.end());
+  if (configs.size() == before) {
+    reply(chatId, "Nessuna preferenza personalizzata trovata per l'utente indicato.");
+    return;
+  }
+  reply(chatId, saveAllUserConfigs(configs) ? "Preferenze utente ripristinate ai default."
+                                             : "Salvataggio fallito.");
 }
 
 void handleNotify(int64_t chatId, const std::string& typeName, bool enabled) {
@@ -397,10 +465,10 @@ void handleIncomingCommand(const IncomingCommand& cmd) {
   logInfo("Command received: chat_id=%lld admin=%d text=%s", static_cast<long long>(cmd.chatId),
           admin, cmd.text.c_str());
 
-  std::string id, strArg;
-  bool hasTs = false, hasArg = false, boolArg = false;
+  std::string id, strArg, dumpTarget;
+  bool hasTs = false, hasArg = false, boolArg = false, hasChatIdArg = false;
   uint32_t uintArg = 0, tsArg = 0;
-  int64_t int64Arg = 0;
+  int64_t int64Arg = 0, dumpChatId = 0;
 
   if (parseCloseEventCommand(cmd.text, id, hasTs, tsArg)) {
     handleCloseEvent(cmd.chatId, admin, id, hasTs, tsArg);
@@ -441,6 +509,14 @@ void handleIncomingCommand(const IncomingCommand& cmd) {
                          "Intervallo persistenza ancora NTP (minuti)");
   } else if (parseLogCommand(cmd.text, hasArg, uintArg)) {
     handleLog(cmd.chatId, hasArg, uintArg);
+  } else if (parseDumpCommand(cmd.text, dumpTarget, dumpChatId, hasChatIdArg)) {
+    handleDump(cmd.chatId, admin, dumpTarget, dumpChatId);
+  } else if (parseResetLogCommand(cmd.text)) {
+    handleResetLog(cmd.chatId, admin);
+  } else if (parseResetNotifCommand(cmd.text, int64Arg)) {
+    handleResetNotif(cmd.chatId, admin, int64Arg);
+  } else if (parseResetUserConfigCommand(cmd.text, int64Arg)) {
+    handleResetUserConfig(cmd.chatId, admin, int64Arg);
   } else if (cmd.text == "/status") {
     handleStatus(cmd.chatId);
   } else if (cmd.text == "/config") {

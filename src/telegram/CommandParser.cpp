@@ -34,6 +34,15 @@ bool isAllDigits(const std::string& s) {
   }
   return true;
 }
+
+// Sec. 4.2 - chat_id is signed (groups have negative ids).
+bool parseInt64Token(const std::string& value, int64_t& out) {
+  if (value.empty()) return false;
+  size_t start = (value[0] == '-') ? 1 : 0;
+  if (start >= value.size() || !isAllDigits(value.substr(start))) return false;
+  out = std::stoll(value);
+  return true;
+}
 }  // namespace
 
 bool parseSingleUintCommand(const std::string& text, const char* commandName, uint32_t& outValue) {
@@ -116,4 +125,53 @@ bool parseLogCommand(const std::string& text, bool& hasArg, uint32_t& outN) {
     hasArg = true;
   }
   return true;
+}
+
+bool parseDumpCommand(const std::string& text, std::string& outTarget, int64_t& outChatId,
+                      bool& outHasChatId) {
+  std::istringstream iss(text);
+  std::string command, target;
+  iss >> command;
+  if (command != "/dump") return false;
+  if (!(iss >> target)) return false;
+
+  bool needsChatId = (target == "notif" || target == "userconfig");
+  bool isValidTarget = needsChatId || target == "log" || target == "users";
+  if (!isValidTarget) return false;
+
+  std::string chatIdStr;
+  bool hasTrailing = static_cast<bool>(iss >> chatIdStr);
+
+  if (needsChatId) {
+    if (!hasTrailing || !parseInt64Token(chatIdStr, outChatId)) return false;
+    outHasChatId = true;
+  } else {
+    if (hasTrailing) return false;  // no argument expected for log/users
+    outHasChatId = false;
+  }
+
+  outTarget = target;
+  return true;
+}
+
+bool parseResetLogCommand(const std::string& text) { return text == "/resetlog CONFERMA"; }
+
+bool parseResetNotifCommand(const std::string& text, int64_t& outChatId) {
+  std::istringstream iss(text);
+  std::string command, chatIdStr, confirm;
+  iss >> command;
+  if (command != "/resetnotif") return false;
+  if (!(iss >> chatIdStr) || !(iss >> confirm) || confirm != "CONFERMA") return false;
+
+  return parseInt64Token(chatIdStr, outChatId);
+}
+
+bool parseResetUserConfigCommand(const std::string& text, int64_t& outChatId) {
+  std::istringstream iss(text);
+  std::string command, chatIdStr, confirm;
+  iss >> command;
+  if (command != "/resetuserconfig") return false;
+  if (!(iss >> chatIdStr) || !(iss >> confirm) || confirm != "CONFERMA") return false;
+
+  return parseInt64Token(chatIdStr, outChatId);
 }

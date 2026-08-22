@@ -1,5 +1,6 @@
 #include "TelegramClient.h"
 
+#include <LittleFS.h>  // must precede FastBot2.h so its FS_H-guarded fs::File overload is enabled
 #include <FastBot2.h>
 
 namespace {
@@ -81,6 +82,17 @@ SendOutcomeCategory sendMessageWithButtons(int64_t chatId, const char* text,
   fb::Message msg(text, fb::ID(static_cast<long long>(chatId)));
   msg.setKeyboard(&kb);
   return sendWithThrottleRetry(msg);
+}
+
+bool sendDocumentFromFile(int64_t chatId, const std::string& path, const std::string& filename) {
+  File f = LittleFS.open(path.c_str(), "r");
+  if (!f) return false;
+
+  fb::File doc(filename.c_str(), fb::File::Type::document, f);
+  doc.chatID = fb::ID(static_cast<long long>(chatId));
+  fb::Result r = g_bot.sendFile(doc);
+  f.close();
+  return !r.isError();
 }
 
 void setTelegramUpdateHandlers(CallbackHandler onCallback, CommandHandler onCommand) {

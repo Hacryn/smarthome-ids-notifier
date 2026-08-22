@@ -4,6 +4,8 @@
 
 #include "UserConfig.h"
 
+inline const char* kUserConfigPath = "/userconfig.json";
+
 // Sec. 4.4 - persistence of userconfig.json on LittleFS, rewritten in full
 // on every change (write-then-rename, sec. 9.3.2). Not testable via the
 // host-side harness (depends on real LittleFS).

@@ -77,6 +77,73 @@ static void test_log_command() {
   assert(!parseLogCommand("/status", hasArg, n));
 }
 
+static void test_dump_command_log_and_users_take_no_argument() {
+  std::string target;
+  int64_t chatId = 0;
+  bool hasChatId = true;
+
+  assert(parseDumpCommand("/dump log", target, chatId, hasChatId));
+  assert(target == "log");
+  assert(!hasChatId);
+
+  assert(parseDumpCommand("/dump users", target, chatId, hasChatId));
+  assert(target == "users");
+  assert(!hasChatId);
+
+  assert(!parseDumpCommand("/dump log 111111111", target, chatId, hasChatId));  // unexpected arg
+}
+
+static void test_dump_command_notif_and_userconfig_require_chat_id() {
+  std::string target;
+  int64_t chatId = 0;
+  bool hasChatId = false;
+
+  assert(parseDumpCommand("/dump notif 111111111", target, chatId, hasChatId));
+  assert(target == "notif");
+  assert(hasChatId);
+  assert(chatId == 111111111LL);
+
+  assert(parseDumpCommand("/dump userconfig -1001234567890", target, chatId, hasChatId));
+  assert(target == "userconfig");
+  assert(chatId == -1001234567890LL);
+
+  assert(!parseDumpCommand("/dump notif", target, chatId, hasChatId));       // missing chat_id
+  assert(!parseDumpCommand("/dump notif abc", target, chatId, hasChatId));   // not a number
+}
+
+static void test_dump_command_rejects_unknown_target() {
+  std::string target;
+  int64_t chatId = 0;
+  bool hasChatId = false;
+  assert(!parseDumpCommand("/dump nonexistent", target, chatId, hasChatId));
+  assert(!parseDumpCommand("/status", target, chatId, hasChatId));
+}
+
+static void test_reset_log_requires_confirmation_word() {
+  assert(parseResetLogCommand("/resetlog CONFERMA"));
+  assert(!parseResetLogCommand("/resetlog"));
+  assert(!parseResetLogCommand("/resetlog conferma"));
+}
+
+static void test_reset_notif_requires_chat_id_and_confirmation() {
+  int64_t chatId = 0;
+  assert(parseResetNotifCommand("/resetnotif 111111111 CONFERMA", chatId));
+  assert(chatId == 111111111LL);
+
+  assert(!parseResetNotifCommand("/resetnotif 111111111", chatId));            // missing CONFERMA
+  assert(!parseResetNotifCommand("/resetnotif abc CONFERMA", chatId));         // not a number
+  assert(!parseResetNotifCommand("/resetnotif 111111111 conferma", chatId));   // case-sensitive
+}
+
+static void test_reset_userconfig_requires_chat_id_and_confirmation() {
+  int64_t chatId = 0;
+  assert(parseResetUserConfigCommand("/resetuserconfig 111111111 CONFERMA", chatId));
+  assert(chatId == 111111111LL);
+
+  assert(!parseResetUserConfigCommand("/resetuserconfig 111111111", chatId));
+  assert(!parseResetUserConfigCommand("/resetuserconfig CONFERMA", chatId));
+}
+
 int main() {
   test_single_uint_command();
   test_single_int64_command();
@@ -85,6 +152,12 @@ int main() {
   test_set_date_format_command();
   test_set_timezone_command();
   test_log_command();
+  test_dump_command_log_and_users_take_no_argument();
+  test_dump_command_notif_and_userconfig_require_chat_id();
+  test_dump_command_rejects_unknown_target();
+  test_reset_log_requires_confirmation_word();
+  test_reset_notif_requires_chat_id_and_confirmation();
+  test_reset_userconfig_requires_chat_id_and_confirmation();
 
   printf("test_command_parser: all tests passed\n");
   return 0;
