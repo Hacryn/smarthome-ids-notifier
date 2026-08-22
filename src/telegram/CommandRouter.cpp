@@ -31,11 +31,15 @@
 #include "../time/Clock.h"
 #include "../users/UserStorage.h"
 #include "CommandParser.h"
+#include "UnauthorizedRequestLog.h"
 
 namespace {
 
 std::vector<AuthorizedUser>* g_users = nullptr;
 uint32_t* g_lastWrittenTs = nullptr;
+
+// Sec. 12.4 - RAM-only, never persisted, reset on reboot (see UnauthorizedRequestLog.h).
+std::vector<UnauthorizedRequest> g_unauthorizedRequests;
 
 uint32_t nowEpoch() { return currentEpoch(); }
 
@@ -142,6 +146,29 @@ void handleListUsers(int64_t chatId, bool admin) {
     text += "- " + std::to_string(user.chatId) + " - " + (user.admin ? "admin" : "standard") +
             " - " + (user.username.empty() ? "(username sconosciuto)" : "@" + user.username) +
             "\n";
+  }
+  reply(chatId, text);
+}
+
+// Sec. 12.4 - the RAM-only unauthorized-request buffer, most recent first.
+void handleRequests(int64_t chatId, bool admin) {
+  if (!requireAdmin(chatId, admin)) return;
+
+  if (g_unauthorizedRequests.empty()) {
+    reply(chatId, "\xF0\x9F\x93\xA8 Nessuna richiesta non autorizzata registrata.");
+    return;
+  }
+
+  std::vector<UserConfig> configs;
+  loadAllUserConfigs(configs);
+  UserConfig userCfg = findOrDefaultUserConfig(configs, chatId);
+
+  std::string text = "\xF0\x9F\x93\xA8 Ultime richieste non autorizzate (max " +
+                      std::to_string(kMaxUnauthorizedRequests) + "):\n";
+  for (auto it = g_unauthorizedRequests.rbegin(); it != g_unauthorizedRequests.rend(); ++it) {
+    text += "- chat_id=" + std::to_string(it->chatId) + ", user_id=" + it->userId +
+            ", username=" + (it->username.empty() ? "(nessuno)" : "@" + it->username) +
+            ", alle " + formatTimestampForUser(it->ts, userCfg, false) + "\n";
   }
   reply(chatId, text);
 }
@@ -472,7 +499,9 @@ void initCommandRouter(std::vector<AuthorizedUser>& users, uint32_t& lastWritten
 void handleIncomingCommand(const IncomingCommand& cmd) {
   if (g_users == nullptr || !isAuthorized(*g_users, cmd.chatId)) {  // sec. 4.2
     logWarn("Command rejected (not whitelisted): chat_id=%lld", static_cast<long long>(cmd.chatId));
-    return;
+    recordUnauthorizedRequest(g_unauthorizedRequests,
+                               {cmd.chatId, cmd.fromUserId, cmd.fromUsername, currentEpoch()});
+    return;  // no reply: an unauthorized chat_id must never learn the bot exists (sec. 4.2)
   }
 
   bool admin = isAdmin(*g_users, cmd.chatId);
@@ -539,6 +568,8 @@ void handleIncomingCommand(const IncomingCommand& cmd) {
     handleResetUserConfig(cmd.chatId, admin, int64Arg);
   } else if (cmd.text == "/listusers") {
     handleListUsers(cmd.chatId, admin);
+  } else if (cmd.text == "/requests") {
+    handleRequests(cmd.chatId, admin);
   } else if (cmd.text == "/status") {
     handleStatus(cmd.chatId);
   } else if (cmd.text == "/config") {

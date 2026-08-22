@@ -63,6 +63,7 @@ Everything that talks to the Telegram Bot API.
 | `CommandRouter.h/.cpp` | Hardware | The command dispatcher: whitelist check, admin gating, and the implementation of every command in [commands.md](commands.md). |
 | `CommandParser.h/.cpp` | Pure | Text parsing for every command's arguments. |
 | `CallbackData.h/.cpp` | Pure | `callback_data` encoding/decoding for the inline "close event" buttons. |
+| `UnauthorizedRequestLog.h/.cpp` | Pure | Fixed-capacity (5), chat_id-deduped, in-RAM-only buffer of unauthorized command attempts, backing `/requests`. |
 
 ## `src/notifications/`
 

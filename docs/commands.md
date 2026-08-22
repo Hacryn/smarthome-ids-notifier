@@ -36,6 +36,7 @@ Implemented in [`src/telegram/CommandRouter.cpp`](../src/telegram/CommandRouter.
 | `/resetlog CONFERMA` | **Destructive.** Deletes `log.jsonl` (event history), also resetting the in-memory monotonicity baseline. Same `CONFERMA`-in-message pattern as `/resetusers`. |
 | `/resetnotif <chat_id> CONFERMA` | **Destructive.** Deletes `notif_<chat_id>.jsonl` for the given user, clearing their pending/abandoned/retry state. |
 | `/resetuserconfig <chat_id> CONFERMA` | **Destructive.** Removes the given user's entry from `userconfig.json`, reverting them to the preference defaults. |
+| `/requests` | Shows the most recent unauthorized command attempts (chat_id, Telegram user id, username, timestamp), most recent first. Backed by an in-RAM-only buffer capped at 5 entries, deduped by `chat_id` (a repeat attempt updates and moves its entry instead of creating a duplicate) — never persisted, reset on reboot. This doesn't change the no-response rule for unauthorized senders (see the note at the top of this page): it only records the attempt for an admin to review later. |
 
 All seven `/setXxx` global-config commands persist immediately to NVS and take effect on the next relevant check — no reboot required.
 

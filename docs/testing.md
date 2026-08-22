@@ -16,7 +16,7 @@ g++ -std=c++17 -Wall -Wextra \
 
 The `-I` flag is only needed for harnesses that touch a module using `ArduinoJson` (it's a portable, non-Arduino-specific library, so it compiles fine here too). Check each test file's own includes to know which `src/*.cpp` files to compile alongside it — there's no single umbrella build script; each harness is compiled standalone as shown above with its dependencies listed explicitly.
 
-As of this writing there are 19 harnesses, roughly one per pure module (see [modules.md](modules.md) for which files are "pure"), covering debounce/timing, the retry and grace-period/aggregation decision logic, JSON schemas for all four persisted file formats, command parsing, timezone presets, the rotation ID collector, the epoch-plausibility check backing NTP-sync detection, notification message text formatting, and the status LED's state-priority rule.
+As of this writing there are 20 harnesses, roughly one per pure module (see [modules.md](modules.md) for which files are "pure"), covering debounce/timing, the retry and grace-period/aggregation decision logic, JSON schemas for all four persisted file formats, command parsing, timezone presets, the rotation ID collector, the epoch-plausibility check backing NTP-sync detection, notification message text formatting, the status LED's state-priority rule, and the unauthorized-request buffer.
 
 **What this proves**: the *logic* is correct, in isolation, for the cases exercised. It says nothing about whether the logic is wired up correctly to real hardware, or whether the hardware behaves as assumed.
 
