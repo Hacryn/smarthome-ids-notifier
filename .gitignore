@@ -68,8 +68,11 @@ vcpkg_installed/
 Testing/
 .cache/
 
-# secrets (sez. 4.7 di DESIGN.md) - versionato solo secrets.h.example
+# secrets (see section 4.7 of DESIGN.md) - only secrets.h.example is versioned
 secrets.h
 
-# sketchbook locale arduino-cli (librerie scaricate)
+# arduino-cli local sketchbook (downloaded libraries)
 .arduino-user/
+
+# local implementation plans, not versioned
+.plans/
