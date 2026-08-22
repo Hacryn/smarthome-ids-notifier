@@ -419,11 +419,14 @@ Not every failure deserves a retry: some API responses indicate a **permanent** 
 ```cpp
 fb::Result r = bot.sendMessage(msg);
 
-if (!r.isError()) {
+if (r.isEmpty()) {
+    // No JSON body received: connection failure (DNS/TCP/TLS/timeout, or no
+    // network connectivity at all) -> Transient - network. Checked first:
+    // isError() only compares the parsed "ok" field, which stays false (not
+    // true) when no response was received - a real success always has a
+    // body, so isEmpty must win regardless of isError.
+} else if (!r.isError()) {
     // Success: "ok": true in the body
-} else if (r.isEmpty()) {
-    // No JSON body received: connection failure (DNS/TCP/TLS/timeout)
-    // -> Transient - network
 } else {
     // JSON body with "ok": false: r.getErrorCode() and r.getError() mirror
     // exactly the error_code/description returned by Telegram

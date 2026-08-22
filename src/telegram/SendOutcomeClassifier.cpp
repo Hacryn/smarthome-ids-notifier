@@ -1,8 +1,13 @@
 #include "SendOutcomeClassifier.h"
 
 SendOutcomeCategory classifySendOutcome(const RawSendOutcome& outcome) {
-  if (!outcome.isError) return SendOutcomeCategory::SUCCESS;
+  // isEmpty must be checked before isError: FastBot2's isError() only
+  // compares the parsed "ok" field, which is false (not true) when no
+  // response body was received at all (e.g. no network connectivity) - a
+  // real success always has a body, so this ordering doesn't change any
+  // previously-covered case.
   if (outcome.isEmpty) return SendOutcomeCategory::TRANSIENT_NETWORK;
+  if (!outcome.isError) return SendOutcomeCategory::SUCCESS;
 
   switch (outcome.errorCode) {
     case 403:

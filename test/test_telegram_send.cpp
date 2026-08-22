@@ -14,6 +14,15 @@ static void test_classify_transient_network_on_empty_body() {
   assert(classifySendOutcome(outcome) == SendOutcomeCategory::TRANSIENT_NETWORK);
 }
 
+static void test_classify_transient_network_on_no_response_without_error_flag() {
+  // Regression: no network connectivity at all -> FastBot2 never receives a
+  // response body, so its isError() (which only compares the parsed "ok"
+  // field) stays false even though nothing was actually sent. isEmpty must
+  // win regardless of isError, or this gets silently misclassified SUCCESS.
+  RawSendOutcome outcome{/*isError=*/false, /*isEmpty=*/true, 0};
+  assert(classifySendOutcome(outcome) == SendOutcomeCategory::TRANSIENT_NETWORK);
+}
+
 static void test_classify_transient_server_5xx() {
   RawSendOutcome outcome500{true, false, 500};
   RawSendOutcome outcome503{true, false, 503};
@@ -65,6 +74,7 @@ static void test_rate_limiter_allows_after_interval() {
 int main() {
   test_classify_success();
   test_classify_transient_network_on_empty_body();
+  test_classify_transient_network_on_no_response_without_error_flag();
   test_classify_transient_server_5xx();
   test_classify_throttling_429();
   test_classify_permanent_recipient();
