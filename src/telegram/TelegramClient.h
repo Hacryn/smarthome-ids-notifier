@@ -48,6 +48,8 @@ struct IncomingCallback {
 struct IncomingCommand {
   int64_t chatId;
   std::string text;
+  std::string fromUserId;    // sec. 12.4 - Telegram user id of the sender
+  std::string fromUsername;  // may be empty, Telegram doesn't guarantee one
 };
 
 using CallbackHandler = void (*)(const IncomingCallback&);

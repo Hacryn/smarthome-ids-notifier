@@ -52,9 +52,14 @@ void onUpdate(fb::Update& u) {
     String text = u.message().text();
     if (text.length() == 0 || text[0] != '/') return;  // commands only
 
+    String fromUserId = u.message().from().id();
+    String fromUsername = u.message().from().username();
+
     IncomingCommand cmd;
     cmd.chatId = u.message().chat().id().toInt64();
     cmd.text = std::string(text.c_str());
+    cmd.fromUserId = std::string(fromUserId.c_str());
+    cmd.fromUsername = std::string(fromUsername.c_str());
     g_commandHandler(cmd);
   }
 }
