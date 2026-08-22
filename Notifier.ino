@@ -30,6 +30,13 @@
 // Sec. 9 - periodic maintenance (space + rotation due), not on every loop cycle.
 constexpr uint32_t kMaintenanceIntervalMs = 10UL * 60UL * 1000UL;
 
+// Sec. 13 - max time to wait for a real NTP sync before REBOOT is
+// logged/notified with the estimated anchor, same as it is today. Well
+// under the 30s Task WDT (sec. 13) - 10s typically covers WiFi connect +
+// DNS + NTP round-trip even under non-ideal conditions, without stretching
+// a boot with WiFi already down (which still degrades to today's behavior).
+constexpr uint32_t kRebootNtpWaitTimeoutMs = 10000;
+
 // Sec. 3.3 - one debouncer per EVENT_TYPES entry (entries with no pin stay unused).
 PinDebouncer g_debouncers[EVENT_TYPES_COUNT];
 
@@ -141,6 +148,30 @@ void onTelegramCallback(const IncomingCallback& cb) {
   answerCallback(cb.queryId, closed ? "Evento chiuso" : "Evento gia' chiuso o non trovato");
 }
 
+// Sec. 13 - bounded wait for a real NTP sync before REBOOT is logged
+// (below), so the one event guaranteed on every boot isn't always marked
+// approximate. Reuses the existing beginNtpSync()/tickClock(), no
+// duplicated NTP logic. Local to the sketch (not a new module): one-shot
+// boot logic, not reusable elsewhere, not host-testable since it depends
+// on real WiFi/time() (same treatment as Clock.cpp/WifiManager.cpp).
+// esp_task_wdt_reset() is called explicitly every iteration: enableLoopWDT()
+// already watches this task by this point in setup(), so this keeps the
+// wait safe regardless.
+void waitForNtpSyncOrTimeout(uint32_t timeoutMs) {
+  uint32_t start = millis();
+  bool ntpStarted = false;
+  while (static_cast<uint32_t>(millis() - start) < timeoutMs) {
+    esp_task_wdt_reset();
+    if (isWifiConnected() && !ntpStarted) {
+      beginNtpSync();
+      ntpStarted = true;
+    }
+    tickClock(millis());
+    if (isTimeSynced()) return;
+    delay(50);
+  }
+}
+
 // Writes a row to the log and triggers the normal notification (sec. 6.1),
 // reused for pin events, NETWORK_ISSUE, and REBOOT: same
 // clamp+append+notify+error-alert pattern in all three cases.
@@ -208,10 +239,6 @@ void setup() {
     }
   }
 
-  // Sec. 3.2/13 - REBOOT made visible on every boot (instant, always
-  // notified), including one triggered by the watchdog above.
-  logAndNotifyEvent(EventType::REBOOT, EventStatus::INSTANT, currentEpoch());
-
   // Sec. 9.3.2 - cleanup of leftover temp files from a rotation
   // interrupted by a blackout.
   cleanupStaleRotationFiles(g_users);
@@ -219,9 +246,26 @@ void setup() {
   // Sec. 11.1 - global configuration (defaults if not yet present in NVS).
   initGlobalConfigStore();
 
+  // initPinMonitor()/initStatusLed() stay here, before the NTP wait below:
+  // an alarm firing during the wait must still be queued by the ISR, never
+  // missed while setup() waits for a real clock.
   initPinMonitor();
   initStatusLed();
   initWifi(WIFI_SSID, WIFI_PASSWORD);
+
+  // Sec. 13 - bounded wait for a real NTP sync (see waitForNtpSyncOrTimeout
+  // above) so REBOOT below can get a real timestamp instead of always being
+  // marked approximate. Falls back silently to the anchor estimate if the
+  // timeout elapses (WiFi down or slow) - same behavior as before this wait
+  // existed.
+  waitForNtpSyncOrTimeout(kRebootNtpWaitTimeoutMs);
+  // Avoids a redundant beginNtpSync() call on the first loop() iteration.
+  g_wifiWasConnected = isWifiConnected();
+
+  // Sec. 3.2/13 - REBOOT made visible on every boot (instant, always
+  // notified), including one triggered by the watchdog above.
+  logAndNotifyEvent(EventType::REBOOT, EventStatus::INSTANT, currentEpoch());
+
   initTelegramClient(TELEGRAM_BOT_TOKEN);
   initCommandRouter(g_users, g_lastWrittenTs);
   setTelegramUpdateHandlers(onTelegramCallback, handleIncomingCommand);
