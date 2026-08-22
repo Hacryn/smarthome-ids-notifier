@@ -24,7 +24,7 @@ Values are stored **in plaintext** in flash — a deliberate choice explained in
 
 ## 2. Global configuration (NVS, admin-managed)
 
-Six values, all admin-settable via Telegram (`/setretention`, `/setgraceperiod`, `/setretryinterval`, `/setmaxretries`, `/setnetthreshold`, `/setaggregatethreshold` — see [commands.md](commands.md) for exact syntax and defaults). Persisted to NVS immediately on change, loaded once at boot into a shared in-RAM struct (`globalConfig()`, see [`src/config/GlobalConfigStorage.h`](../src/config/GlobalConfigStorage.h)) that every consumer reads from directly — no reboot needed for a change to take effect.
+Seven values, all admin-settable via Telegram (`/setretention`, `/setgraceperiod`, `/setretryinterval`, `/setmaxretries`, `/setnetthreshold`, `/setaggregatethreshold`, `/setanchorinterval` — see [commands.md](commands.md) for exact syntax and defaults). Persisted to NVS immediately on change, loaded once at boot into a shared in-RAM struct (`globalConfig()`, see [`src/config/GlobalConfigStorage.h`](../src/config/GlobalConfigStorage.h)) that every consumer reads from directly — no reboot needed for a change to take effect.
 
 | Setting | Default | Unit |
 |---|---|---|
@@ -34,6 +34,7 @@ Six values, all admin-settable via Telegram (`/setretention`, `/setgraceperiod`,
 | Max retries before abandoning | 24 | attempts |
 | Network-issue threshold | 120 | seconds |
 | Aggregation threshold | 3 | pending notifications |
+| NTP anchor persistence interval | 360 | minutes |
 
 ## 3. Per-user preferences (`userconfig.json`, self-service)
 

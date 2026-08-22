@@ -313,7 +313,7 @@ The ESP32 has no battery-backed RTC: real time comes only from NTP, which requir
 
 #### 5.4.1 Persistent time anchor (NVS)
 
-- While time is valid (NTP synced), the system saves the current epoch to NVS (`last_epoch` key) **every 10 minutes**, as well as immediately after every successful NTP sync.
+- While time is valid (NTP synced), the system saves the current epoch to NVS (`last_epoch` key) at the **configured anchor persistence interval** (default: **6 hours**, admin-configurable via `/setanchorinterval`, section 11.1), as well as immediately after every successful NTP sync.
 - At boot, before NTP is available, the working time is reconstructed as:
 
   ```
@@ -321,7 +321,7 @@ The ESP32 has no battery-backed RTC: real time comes only from NTP, which requir
   ```
 
 - Every row written with a time reconstructed this way carries the **`"a": 1`** flag. On the first successful NTP sync, the flag stops being applied to subsequent rows; **rows already written are not corrected retroactively**, consistent with the append-only nature of the log.
-- **NVS wear**: 144 writes per day of a single 64-bit value. NVS partition wear-leveling aggregates hundreds of writes per page before requiring an erase, bringing effective wear down to a few hundred erase cycles per year — entirely negligible against the useful life of the flash.
+- **NVS wear**: at the default 6-hour interval, 4 writes per day of a single 64-bit value (was 144/day at the original 10-minute interval; even an admin-configured minimum of a few minutes stays well within NVS wear-leveling margins). NVS partition wear-leveling aggregates hundreds of writes per page before requiring an erase, bringing effective wear down to a negligible number of erase cycles per year against the useful life of the flash.
 
 #### 5.4.2 Consequences of the `a` flag on behavior
 
@@ -708,6 +708,7 @@ The timezone is a **personal preference** saved in `userconfig.json` (section 4.
 | Maximum number of attempts before giving up | 24 | `/setmaxretries <n>` |
 | Duration threshold to generate `NETWORK_ISSUE` | 120 seconds | `/setnetthreshold <seconds>` |
 | Recovered-notification aggregation threshold | 3 | `/setaggregatethreshold <n>` |
+| NTP anchor persistence interval | 360 minutes (6 hours) | `/setanchorinterval <minutes>` |
 
 Service NVS keys, not modifiable by command: `schema_ver` (5.5), `last_epoch` (5.4.1), last-rotation timestamp (9.3.2).
 
@@ -739,6 +740,7 @@ Service NVS keys, not modifiable by command: `schema_ver` (5.5), `last_epoch` (5
 | `/setmaxretries <n>` | Admin | Sets the number of attempts beyond which a notification is abandoned |
 | `/setnetthreshold <seconds>` | Admin | Sets the minimum duration of a connectivity outage for it to generate an event |
 | `/setaggregatethreshold <n>` | Admin | Sets the threshold beyond which recovered notifications are grouped into a single message |
+| `/setanchorinterval <minutes>` | Admin | Sets how often the NTP fallback time anchor is persisted to NVS |
 | `/closeevent <id> [timestamp]` | Admin | Manually closes an event left open (text fallback for inline buttons, see 8.1) |
 | `/adduser <chat_id>` | Admin | Adds a new `chat_id` to the whitelist |
 | `/removeuser <chat_id>` | Admin | Removes a `chat_id` from the whitelist |
@@ -815,7 +817,7 @@ Internal alarm        19/08 08:30 → OPEN
 | Storage optimization | `type`, `status` (and `state` for notifications) as numeric enums instead of text strings; storage is nonetheless not a design constraint |
 | Event id format | v4 UUID in hex without dashes, 32 characters (unchanged) |
 | Closing open events | **Inline buttons** (FastBot2 `InlineKeyboard`, built dynamically) in the admin summary message (`callback_data` `c:<id>`), with `/closeevent` as a text fallback |
-| Timestamp without NTP | NVS time anchor saved every 10 min; reconstruction via `last_epoch + millis()`; `a: 1` flag on approximate rows |
+| Timestamp without NTP | NVS time anchor saved at the configured interval (default 6h); reconstruction via `last_epoch + millis()`; `a: 1` flag on approximate rows |
 | Timestamp monotonicity | Clamp on `last_written_ts`, initialized at boot from the log's last row |
 | Schema version | Integer in NVS (`schema_ver`), checked at boot; downgrade → degraded mode without touching data |
 | Notification storage | **Proposal E adopted**: inverse log, one file per chat (`notif_<chat_id>.jsonl`); proposals A-D and F rejected but documented in 7.3 |

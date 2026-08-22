@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <time.h>
 
+#include "../config/GlobalConfigStorage.h"
 #include "ClockPolicy.h"
 #include "TimeAnchor.h"
 #include "TimeAnchorStorage.h"
@@ -34,9 +35,10 @@ void tickClock(uint32_t nowMillis) {
     return;
   }
 
-  if (shouldPersistAnchor(nowMillis - g_lastAnchorPersistMillis)) {
+  uint32_t intervalMs = globalConfig().anchorPersistIntervalMinutes * 60000UL;
+  if (shouldPersistAnchor(nowMillis - g_lastAnchorPersistMillis, intervalMs)) {
     g_anchorEpoch = currentEpoch();
-    saveLastEpoch(g_anchorEpoch);  // sec. 5.4.1 - every 10 minutes while time stays valid
+    saveLastEpoch(g_anchorEpoch);  // sec. 5.4.1 - while time stays valid, per the configured interval
     g_lastAnchorPersistMillis = nowMillis;
   }
 }

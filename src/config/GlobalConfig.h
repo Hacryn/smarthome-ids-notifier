@@ -5,6 +5,7 @@
 #include "../notifications/NotificationPresentation.h"
 #include "../notifications/RetryTimer.h"
 #include "../rotation/RotationPolicy.h"
+#include "../time/TimeAnchor.h"
 
 // Sec. 11.1 - global configuration, admin-modifiable only. The default
 // values mirror the constants already defined in their respective modules
@@ -17,4 +18,5 @@ struct GlobalConfig {
   uint32_t maxRetries = kMaxRetries;
   uint32_t networkIssueThresholdSec = 120;  // sec. 3.4.1
   uint32_t aggregateThreshold = kAggregateThreshold;
+  uint32_t anchorPersistIntervalMinutes = ANCHOR_PERSIST_INTERVAL_MS / 60000UL;  // sec. 5.4.1
 };

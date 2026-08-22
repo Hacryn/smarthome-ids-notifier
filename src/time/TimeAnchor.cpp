@@ -11,6 +11,6 @@ ClampedTimestamp applyMonotonicClamp(uint32_t candidateTs, uint32_t lastWrittenT
   return {candidateTs, false};
 }
 
-bool shouldPersistAnchor(uint32_t msSinceLastPersist) {
-  return msSinceLastPersist >= ANCHOR_PERSIST_INTERVAL_MS;
+bool shouldPersistAnchor(uint32_t msSinceLastPersist, uint32_t intervalMs) {
+  return msSinceLastPersist >= intervalMs;
 }

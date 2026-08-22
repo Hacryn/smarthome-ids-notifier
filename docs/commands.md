@@ -30,7 +30,8 @@ Implemented in [`src/telegram/CommandRouter.cpp`](../src/telegram/CommandRouter.
 | `/setmaxretries <n>` | Failed attempts after which a pending notification is abandoned. Default 24. |
 | `/setnetthreshold <seconds>` | Minimum outage duration before a `NETWORK_ISSUE` event is logged. Default 120. |
 | `/setaggregatethreshold <n>` | Pending-notification count above which a recovery batch is sent as one aggregated message instead of one per event. Default 3. |
+| `/setanchorinterval <minutes>` | How often the NTP fallback time anchor is persisted to NVS while time is valid. Default 360 (6 hours). |
 
-All six `/setXxx` global-config commands persist immediately to NVS and take effect on the next relevant check — no reboot required.
+All seven `/setXxx` global-config commands persist immediately to NVS and take effect on the next relevant check — no reboot required.
 
 `chat_id` arguments accept negative numbers (Telegram group/supergroup IDs).

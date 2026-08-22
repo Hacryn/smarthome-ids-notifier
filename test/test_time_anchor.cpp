@@ -34,9 +34,16 @@ static void test_clamp_equal_is_not_clamped() {
 }
 
 static void test_should_persist_anchor_threshold() {
-  assert(!shouldPersistAnchor(ANCHOR_PERSIST_INTERVAL_MS - 1));
-  assert(shouldPersistAnchor(ANCHOR_PERSIST_INTERVAL_MS));
-  assert(shouldPersistAnchor(ANCHOR_PERSIST_INTERVAL_MS + 1));
+  assert(!shouldPersistAnchor(ANCHOR_PERSIST_INTERVAL_MS - 1, ANCHOR_PERSIST_INTERVAL_MS));
+  assert(shouldPersistAnchor(ANCHOR_PERSIST_INTERVAL_MS, ANCHOR_PERSIST_INTERVAL_MS));
+  assert(shouldPersistAnchor(ANCHOR_PERSIST_INTERVAL_MS + 1, ANCHOR_PERSIST_INTERVAL_MS));
+}
+
+static void test_should_persist_anchor_respects_configured_interval() {
+  // Admin-configured interval (e.g. /setanchorinterval), independent of the default.
+  uint32_t customIntervalMs = 15UL * 60UL * 1000UL;  // 15 minutes
+  assert(!shouldPersistAnchor(customIntervalMs - 1, customIntervalMs));
+  assert(shouldPersistAnchor(customIntervalMs, customIntervalMs));
 }
 
 int main() {
@@ -46,6 +53,7 @@ int main() {
   test_clamp_applied_when_going_backwards();
   test_clamp_equal_is_not_clamped();
   test_should_persist_anchor_threshold();
+  test_should_persist_anchor_respects_configured_interval();
 
   printf("test_time_anchor: all tests passed\n");
   return 0;

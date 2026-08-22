@@ -315,7 +315,9 @@ void handleConfig(int64_t chatId, bool admin) {
     text += "- Tentativi massimi: " + std::to_string(g.maxRetries) + "\n";
     text += "- Soglia problema di rete: " + std::to_string(g.networkIssueThresholdSec) +
             " secondi\n";
-    text += "- Soglia aggregazione: " + std::to_string(g.aggregateThreshold);
+    text += "- Soglia aggregazione: " + std::to_string(g.aggregateThreshold) + "\n";
+    text += "- Intervallo persistenza ancora NTP: " +
+            std::to_string(g.anchorPersistIntervalMinutes) + " minuti";
   }
 
   reply(chatId, text);
@@ -372,6 +374,9 @@ void handleIncomingCommand(const IncomingCommand& cmd) {
   } else if (parseSingleUintCommand(cmd.text, "/setaggregatethreshold", uintArg)) {
     handleSetGlobalUint(cmd.chatId, admin, &GlobalConfig::aggregateThreshold, uintArg,
                          "Soglia di aggregazione");
+  } else if (parseSingleUintCommand(cmd.text, "/setanchorinterval", uintArg)) {
+    handleSetGlobalUint(cmd.chatId, admin, &GlobalConfig::anchorPersistIntervalMinutes, uintArg,
+                         "Intervallo persistenza ancora NTP (minuti)");
   } else if (parseLogCommand(cmd.text, hasArg, uintArg)) {
     handleLog(cmd.chatId, hasArg, uintArg);
   } else if (cmd.text == "/status") {

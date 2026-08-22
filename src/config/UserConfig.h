@@ -11,9 +11,9 @@
 // Sec. 11.2 - per-user preferences.
 struct UserConfig {
   int64_t chatId = 0;
-  std::string dateFormat = "%Y-%m-%dT%H:%M:%SZ";  // default ISO 8601
-  TimezonePreset timezone = TimezonePreset::UTC;   // default UTC
-  std::vector<EventType> disabledTypes;            // default: all enabled (empty)
+  std::string dateFormat = "%d-%m-%Y %H:%M:%S";             // default ISO 8601
+  TimezonePreset timezone = TimezonePreset::EUROPE_ROME;    // default UTC
+  std::vector<EventType> disabledTypes;                     // default: all enabled (empty)
 };
 
 bool isNotifyEnabledForUser(const UserConfig& cfg, EventType type);
