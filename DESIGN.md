@@ -862,4 +862,3 @@ Internal alarm        19/08 08:30 → OPEN
 ## 15. Next steps
 
 - Evaluate (optional, discussed separately) introducing commands to arm/disarm the alarm remotely — requires verifying hardware support on the panel and a careful additional security analysis before being formalized in this document.
-- Implementation of the complete Arduino sketch.
