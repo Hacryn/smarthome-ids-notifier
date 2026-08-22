@@ -76,3 +76,6 @@ secrets.h
 
 # local implementation plans, not versioned
 .plans/
+
+# local investigation findings, not versioned
+.findings/
