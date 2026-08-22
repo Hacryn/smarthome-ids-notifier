@@ -160,13 +160,33 @@ void onTelegramCallback(const IncomingCallback& cb) {
 void waitForNtpSyncOrTimeout(uint32_t timeoutMs) {
   uint32_t start = millis();
   bool ntpStarted = false;
+
+  // Sec. 13 - read once here (rather than every 2s as in loop()) so the LED
+  // reflects an already-open alarm/230V-power-loss from the very first tick
+  // of this wait, not only once loop() detects it.
+  OpenEvent tmp{};
+  bool alarmOrPowerLossOpen = findOpenEventOfType(EventType::ALARM_GENERAL, tmp) ||
+                               findOpenEventOfType(EventType::ALARM_INTERNAL, tmp) ||
+                               findOpenEventOfType(EventType::ALARM_GARAGE, tmp) ||
+                               findOpenEventOfType(EventType::POWER_LOSS, tmp);
+
   while (static_cast<uint32_t>(millis() - start) < timeoutMs) {
     esp_task_wdt_reset();
+
+    tickWifi(millis());  // lets a connection retry happen within the timeout
     if (isWifiConnected() && !ntpStarted) {
       beginNtpSync();
       ntpStarted = true;
     }
     tickClock(millis());
+
+    // Same reachable/LED-state computation as loop(), so the LED doesn't
+    // stay off for the whole wait.
+    bool reachable = isWifiConnected() && isTelegramReachable();
+    StatusLedState ledState = decideStatusLedState(reachable, isTimeSynced(),
+                                                    alarmOrPowerLossOpen, isFilesystemDegraded());
+    tickStatusLed(millis(), ledState);
+
     if (isTimeSynced()) return;
     delay(50);
   }
@@ -212,6 +232,15 @@ void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs) {
 
 void setup() {
   Serial.begin(115200);
+
+  // Sec. 13 - "boot in progress" indicator: on for the whole duration of
+  // setup(), off on exit (below). Pin separate from the RGB status LED
+  // (LED_RED/GREEN/BLUE) - polarity HIGH=on, to be confirmed on first real
+  // hardware test.
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  logInfo("Entering setup()");
 
   // Sec. 3.3/13 - Task WDT on the application loop, timeout above the
   // maximum network timeout (30s vs. 10s). A genuine block triggers a
@@ -269,6 +298,9 @@ void setup() {
   initTelegramClient(TELEGRAM_BOT_TOKEN);
   initCommandRouter(g_users, g_lastWrittenTs);
   setTelegramUpdateHandlers(onTelegramCallback, handleIncomingCommand);
+
+  digitalWrite(LED_BUILTIN, LOW);
+  logInfo("Exiting setup()");
 }
 
 void loop() {

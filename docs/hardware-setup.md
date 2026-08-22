@@ -53,6 +53,8 @@ The Nano ESP32's built-in RGB LED (discrete `LED_RED`/`LED_GREEN`/`LED_BLUE` GPI
 
 Priority when multiple conditions hold: alarm+network/time > alarm > degraded > network/time > ok. See [`src/diagnostics/StatusLedPolicy.h`](../src/diagnostics/StatusLedPolicy.h) for the exact rule and [architecture.md](architecture.md) for how it's driven from `loop()`.
 
+A separate, single-color boot indicator (`LED_BUILTIN`, a distinct physical LED — not part of the RGB status LED above) is on for the entire duration of `setup()` and off once it returns, so a boot in progress (including the NTP wait below) is visible even before the RGB LED starts reflecting real state.
+
 ## Toolchain
 
 | Tool | Used for |
