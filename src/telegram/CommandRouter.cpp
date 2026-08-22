@@ -132,6 +132,20 @@ void handleResetUsers(int64_t chatId, bool admin) {
   reply(chatId, "Whitelist azzerata. Al prossimo riavvio l'admin di secrets.h verra' ripristinato.");
 }
 
+// Sec. 12.4 - lists every whitelisted user with their cached username.
+void handleListUsers(int64_t chatId, bool admin) {
+  if (!requireAdmin(chatId, admin)) return;
+
+  std::string text =
+      "\xF0\x9F\x91\xA5 Utenti autorizzati (" + std::to_string(g_users->size()) + "):\n";
+  for (const auto& user : *g_users) {
+    text += "- " + std::to_string(user.chatId) + " - " + (user.admin ? "admin" : "standard") +
+            " - " + (user.username.empty() ? "(username sconosciuto)" : "@" + user.username) +
+            "\n";
+  }
+  reply(chatId, text);
+}
+
 // Sec. 12.3 - raw file dump for debugging, sent as a Telegram document.
 // target is one of "log"/"notif"/"userconfig"/"users", already validated
 // by CommandParser; targetChatId is only meaningful for "notif".
@@ -465,6 +479,12 @@ void handleIncomingCommand(const IncomingCommand& cmd) {
   logInfo("Command received: chat_id=%lld admin=%d text=%s", static_cast<long long>(cmd.chatId),
           admin, cmd.text.c_str());
 
+  // Sec. 12.4 - passive username cache update, for /listusers. Only writes
+  // to LittleFS when the value actually changed.
+  if (!cmd.fromUsername.empty() && updateUsername(*g_users, cmd.chatId, cmd.fromUsername)) {
+    saveUsers(*g_users);
+  }
+
   std::string id, strArg, dumpTarget;
   bool hasTs = false, hasArg = false, boolArg = false, hasChatIdArg = false;
   uint32_t uintArg = 0, tsArg = 0;
@@ -517,6 +537,8 @@ void handleIncomingCommand(const IncomingCommand& cmd) {
     handleResetNotif(cmd.chatId, admin, int64Arg);
   } else if (parseResetUserConfigCommand(cmd.text, int64Arg)) {
     handleResetUserConfig(cmd.chatId, admin, int64Arg);
+  } else if (cmd.text == "/listusers") {
+    handleListUsers(cmd.chatId, admin);
   } else if (cmd.text == "/status") {
     handleStatus(cmd.chatId);
   } else if (cmd.text == "/config") {

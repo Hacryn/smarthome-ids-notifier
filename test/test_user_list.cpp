@@ -4,7 +4,7 @@
 #include "../src/users/UserList.h"
 
 static void test_is_authorized_and_is_admin() {
-  std::vector<AuthorizedUser> users = {{111, true, 1000}, {222, false, 2000}};
+  std::vector<AuthorizedUser> users = {{111, true, 1000, ""}, {222, false, 2000, ""}};
 
   assert(isAuthorized(users, 111));
   assert(isAuthorized(users, 222));
@@ -24,14 +24,14 @@ static void test_add_user_rejects_duplicate() {
 }
 
 static void test_remove_user() {
-  std::vector<AuthorizedUser> users = {{111, false, 1000}};
+  std::vector<AuthorizedUser> users = {{111, false, 1000, ""}};
   assert(removeUser(users, 111));
   assert(!isAuthorized(users, 111));
   assert(!removeUser(users, 111));  // already removed
 }
 
 static void test_set_admin_flag() {
-  std::vector<AuthorizedUser> users = {{111, false, 1000}};
+  std::vector<AuthorizedUser> users = {{111, false, 1000, ""}};
   assert(setAdminFlag(users, 111, true));
   assert(isAdmin(users, 111));
   assert(setAdminFlag(users, 111, false));
@@ -40,7 +40,7 @@ static void test_set_admin_flag() {
 }
 
 static void test_reset_users() {
-  std::vector<AuthorizedUser> users = {{111, true, 1000}, {222, false, 2000}};
+  std::vector<AuthorizedUser> users = {{111, true, 1000, ""}, {222, false, 2000, ""}};
   resetUsers(users);
   assert(users.empty());
 }
@@ -58,8 +58,8 @@ static void test_ensure_onboarding_admin_only_when_empty() {
 
 static void test_serialize_roundtrip() {
   std::vector<AuthorizedUser> users = {
-      {111111111LL, true, 1755000000},
-      {-1001234567890LL, false, 1755600000},  // sec. 4.2 - group id, negative
+      {111111111LL, true, 1755000000, "mario_rossi"},
+      {-1001234567890LL, false, 1755600000, ""},  // sec. 4.2 - group id, negative
   };
 
   std::string json = serializeUsers(users);
@@ -70,8 +70,31 @@ static void test_serialize_roundtrip() {
   assert(parsed[0].chatId == 111111111LL);
   assert(parsed[0].admin == true);
   assert(parsed[0].addedTs == 1755000000);
+  assert(parsed[0].username == "mario_rossi");
   assert(parsed[1].chatId == -1001234567890LL);
   assert(parsed[1].admin == false);
+  assert(parsed[1].username == "");
+}
+
+static void test_parse_username_missing_defaults_to_empty() {
+  // A users.json written by a pre-username firmware version.
+  std::vector<AuthorizedUser> out;
+  assert(parseUsers("{\"authorized\":[{\"chat_id\":111,\"admin\":true,\"added_ts\":1000}]}", out));
+  assert(out.size() == 1);
+  assert(out[0].username == "");
+}
+
+static void test_update_username() {
+  std::vector<AuthorizedUser> users = {{111, false, 1000, ""}};
+
+  assert(updateUsername(users, 111, "mario_rossi"));  // was empty -> changed
+  assert(users[0].username == "mario_rossi");
+
+  assert(!updateUsername(users, 111, "mario_rossi"));  // unchanged -> no write needed
+  assert(updateUsername(users, 111, "mario_r"));        // changed to a different value
+  assert(users[0].username == "mario_r");
+
+  assert(!updateUsername(users, 999, "someone"));  // chat_id not present
 }
 
 static void test_parse_rejects_malformed_and_missing_field() {
@@ -94,6 +117,8 @@ int main() {
   test_reset_users();
   test_ensure_onboarding_admin_only_when_empty();
   test_serialize_roundtrip();
+  test_parse_username_missing_defaults_to_empty();
+  test_update_username();
   test_parse_rejects_malformed_and_missing_field();
   test_parse_empty_authorized_array();
 

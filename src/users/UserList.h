@@ -11,6 +11,7 @@ struct AuthorizedUser {
   int64_t chatId;
   bool admin;
   uint32_t addedTs;
+  std::string username;  // sec. 12.4 - cached from the last message seen, empty if never observed
 };
 
 bool isAuthorized(const std::vector<AuthorizedUser>& users, int64_t chatId);
@@ -38,6 +39,14 @@ void resetUsers(std::vector<AuthorizedUser>& users);
 bool ensureOnboardingAdmin(std::vector<AuthorizedUser>& users, int64_t onboardingChatId,
                             uint32_t nowTs);
 
-// Sec. 4.4 - users.json schema: {"authorized": [{"chat_id","admin","added_ts"}, ...]}.
+// Sec. 4.4 - users.json schema: {"authorized": [{"chat_id","admin","added_ts","username"}, ...]}.
+// "username" is optional on parse (missing -> ""), for compatibility with a
+// users.json written by a firmware version predating this field.
 std::string serializeUsers(const std::vector<AuthorizedUser>& users);
 bool parseUsers(const std::string& json, std::vector<AuthorizedUser>& out);
+
+// Sec. 12.4 - updates the cached username for chatId if different from what's
+// stored (including going from empty to a real value). Returns true only if
+// something actually changed, so the caller can skip a LittleFS write when
+// it didn't. No-op (returns false) if chatId isn't in the list.
+bool updateUsername(std::vector<AuthorizedUser>& users, int64_t chatId, const std::string& username);

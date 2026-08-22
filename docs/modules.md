@@ -113,7 +113,7 @@ The whitelist.
 
 | File | Kind | Responsibility |
 |---|---|---|
-| `UserList.h/.cpp` | Pure | Whitelist operations (add/remove/promote/reset), onboarding, JSON (de)serialization. |
+| `UserList.h/.cpp` | Pure | Whitelist operations (add/remove/promote/reset), onboarding, cached-username update (`/listusers`), JSON (de)serialization. |
 | `UserStorage.h/.cpp` | Hardware | LittleFS I/O for `users.json`. |
 
 ## `src/diagnostics/`

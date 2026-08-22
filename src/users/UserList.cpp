@@ -26,7 +26,7 @@ bool isAdmin(const std::vector<AuthorizedUser>& users, int64_t chatId) {
 
 bool addUser(std::vector<AuthorizedUser>& users, int64_t chatId, bool admin, uint32_t addedTs) {
   if (isAuthorized(users, chatId)) return false;
-  users.push_back({chatId, admin, addedTs});
+  users.push_back({chatId, admin, addedTs, ""});
   return true;
 }
 
@@ -46,10 +46,18 @@ bool setAdminFlag(std::vector<AuthorizedUser>& users, int64_t chatId, bool admin
 
 void resetUsers(std::vector<AuthorizedUser>& users) { users.clear(); }
 
+bool updateUsername(std::vector<AuthorizedUser>& users, int64_t chatId,
+                     const std::string& username) {
+  auto it = findUser(users, chatId);
+  if (it == users.end() || it->username == username) return false;
+  it->username = username;
+  return true;
+}
+
 bool ensureOnboardingAdmin(std::vector<AuthorizedUser>& users, int64_t onboardingChatId,
                             uint32_t nowTs) {
   if (!users.empty()) return false;
-  users.push_back({onboardingChatId, true, nowTs});
+  users.push_back({onboardingChatId, true, nowTs, ""});
   return true;
 }
 
@@ -61,6 +69,7 @@ std::string serializeUsers(const std::vector<AuthorizedUser>& users) {
     obj["chat_id"] = u.chatId;
     obj["admin"] = u.admin;
     obj["added_ts"] = u.addedTs;
+    obj["username"] = u.username;
   }
 
   std::string out;
@@ -87,6 +96,8 @@ bool parseUsers(const std::string& json, std::vector<AuthorizedUser>& out) {
     u.chatId = chatId.as<int64_t>();
     u.admin = admin.as<bool>();
     u.addedTs = addedTs.as<uint32_t>();
+    JsonVariantConst username = entry["username"];
+    u.username = username.isNull() ? "" : username.as<std::string>();
     out.push_back(u);
   }
   return true;

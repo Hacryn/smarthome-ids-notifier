@@ -23,6 +23,7 @@ Implemented in [`src/telegram/CommandRouter.cpp`](../src/telegram/CommandRouter.
 | `/adduser <chat_id>` | Adds a chat ID to the whitelist as a standard (non-admin) user. |
 | `/removeuser <chat_id>` | Removes a chat ID from the whitelist. |
 | `/promoteuser <chat_id>` | Grants the admin flag to an already-whitelisted user. |
+| `/listusers` | Lists every whitelisted user with their admin/standard role and cached Telegram username (`(username sconosciuto)` if never observed — see [data-model.md](data-model.md#usersjson--whitelist)). |
 | `/resetusers CONFERMA` | **Destructive.** Empties the whitelist entirely. Requires the literal confirmation word `CONFERMA` in the same message — there's no multi-step confirmation flow, by design (see [testing.md](testing.md) for why that keeps the command handler stateless). Note this also locks out whoever ran it; the whitelist is only repopulated (with the `secrets.h` onboarding admin) on the next reboot. |
 | `/setretention <weeks>` | Global log/notification retention period. Default 52. |
 | `/setgraceperiod <minutes>` | How long after an event before a recovered notification gets the "recovered" prefix. Default 5. |

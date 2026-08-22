@@ -61,13 +61,13 @@ Rotation removes `RESOLVED`/`ABANDONED` rows older than the retention period; `P
 ```json
 {
   "authorized": [
-    {"chat_id": 111111111, "admin": true, "added_ts": 1755000000},
-    {"chat_id": -1001234567890, "admin": false, "added_ts": 1755600000}
+    {"chat_id": 111111111, "admin": true, "added_ts": 1755000000, "username": "mario_rossi"},
+    {"chat_id": -1001234567890, "admin": false, "added_ts": 1755600000, "username": ""}
   ]
 }
 ```
 
-`chat_id` is always `int64_t` (groups/supergroups exceed 32 bits). `added_ts` gates which historical events a newly-added user gets caught up on: events older than their `added_ts` are excluded from notification (both live and recovery flows) — `/log` history is unaffected and remains fully visible to anyone authorized. Rewritten in full on every change. Pure model + JSON (de)serialization in [`src/users/UserList.h`](../src/users/UserList.h); LittleFS I/O in [`src/users/UserStorage.h`](../src/users/UserStorage.h).
+`chat_id` is always `int64_t` (groups/supergroups exceed 32 bits). `added_ts` gates which historical events a newly-added user gets caught up on: events older than their `added_ts` are excluded from notification (both live and recovery flows) — `/log` history is unaffected and remains fully visible to anyone authorized. `username` is a passive cache (see [commands.md](commands.md) — `/listusers`) updated from the Telegram username on every command received from that user; empty if never observed, and optional on parse for compatibility with a file written before this field existed. Rewritten in full on every change. Pure model + JSON (de)serialization in [`src/users/UserList.h`](../src/users/UserList.h); LittleFS I/O in [`src/users/UserStorage.h`](../src/users/UserStorage.h).
 
 ## `userconfig.json` — per-user preferences
 
