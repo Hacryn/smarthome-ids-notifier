@@ -3,6 +3,7 @@
 
 #include "secrets.h"
 #include "src/diagnostics/SerialLog.h"
+#include "src/diagnostics/StatusLed.h"
 #include "src/config/GlobalConfigStorage.h"
 #include "src/events/EventId.h"
 #include "src/events/EventLogStorage.h"
@@ -54,6 +55,14 @@ bool g_bootTasksDone = false;
 bool g_needsFsFormatAlert = false;
 
 uint32_t g_lastMaintenanceMillis = 0;
+
+// Sec. 13 - drives the status LED's ALARM state. Re-checked periodically
+// (not every loop cycle, to avoid a LittleFS read on every spin) rather
+// than tracked incrementally, so it can't drift out of sync with a
+// manual /closeevent (which doesn't go through logAndNotifyEvent below).
+constexpr uint32_t kLedAlarmCheckIntervalMs = 2000;
+uint32_t g_lastLedAlarmCheckMillis = 0;
+bool g_ledAlarmOrPowerLossOpen = false;
 
 bool initFilesystem() {
   bool mounted = LittleFS.begin(false);
@@ -211,6 +220,7 @@ void setup() {
   initGlobalConfigStore();
 
   initPinMonitor();
+  initStatusLed();
   initWifi(WIFI_SSID, WIFI_PASSWORD);
   initTelegramClient(TELEGRAM_BOT_TOKEN);
   initCommandRouter(g_users, g_lastWrittenTs);
@@ -282,4 +292,18 @@ void loop() {
 
   tickNotificationEngine(g_users, nowMillis, epochNow);
   tickTelegramUpdates();
+
+  // Sec. 13 - status LED, non-blocking (see StatusLedPolicy for the
+  // priority rule between alarm/degraded/network-time/ok).
+  if (nowMillis - g_lastLedAlarmCheckMillis >= kLedAlarmCheckIntervalMs) {
+    OpenEvent tmp{};
+    g_ledAlarmOrPowerLossOpen = findOpenEventOfType(EventType::ALARM_GENERAL, tmp) ||
+                                 findOpenEventOfType(EventType::ALARM_INTERNAL, tmp) ||
+                                 findOpenEventOfType(EventType::ALARM_GARAGE, tmp) ||
+                                 findOpenEventOfType(EventType::POWER_LOSS, tmp);
+    g_lastLedAlarmCheckMillis = nowMillis;
+  }
+  StatusLedState ledState = decideStatusLedState(reachable, isTimeSynced(),
+                                                  g_ledAlarmOrPowerLossOpen, isFilesystemDegraded());
+  tickStatusLed(nowMillis, ledState);
 }

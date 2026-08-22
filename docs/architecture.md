@@ -49,6 +49,10 @@ The ESP32 has no battery-backed RTC. `src/time/Clock.h` is the single source of 
 - Until the first sync succeeds, `currentEpoch()` falls back to `last_epoch_anchor + millis()/1000`, where the anchor is persisted to NVS every `anchorPersistIntervalMinutes` (admin-configurable, default 360 = 6 hours, via `/setanchorinterval`) while time is valid, and immediately after every successful sync. This is what lets a reboot during a network outage still produce plausible (if approximate) timestamps instead of dating everything to 1970.
 - Every event row carries an `approx` flag (`"a":1` in the JSON, rendered as a `~` prefix) whenever it wasn't derived from a live NTP-synced clock, or whenever [monotonicity clamping](data-model.md#monotonicity) had to correct it.
 
+## Status LED
+
+`loop()` also drives the Nano ESP32's built-in RGB LED as a glanceable state indicator, non-blocking (no `delay()` — blink timing comes from `millis()`). The open-alarm/power-loss check behind it is re-read from the log every 2 s rather than tracked incrementally, so it can't drift out of sync with a manual `/closeevent`. See [hardware-setup.md](hardware-setup.md#status-led) for the color mapping and [`src/diagnostics/StatusLedPolicy.h`](../src/diagnostics/StatusLedPolicy.h) for the priority rule.
+
 ## Rotation and space monitoring
 
 LittleFS has no selective row deletion, so weekly rotation is a filtered full rewrite: read the file in streaming, collect deletable event IDs (closed events past the retention cutoff) up to a fixed 256-ID cap to bound RAM, rewrite to a temp file, and atomically rename over the original — the rename happens *before* the "last rotation" NVS timestamp is updated, so a power loss mid-rotation is idempotent, never a skipped cycle. Filesystem usage is checked at boot, after every rotation, and periodically; crossing 80% forces an early rotation, crossing 95% suspends non-essential writes (pending-notification rows) while keeping event detection writes prioritized. See [`src/rotation/`](../src/rotation/) and [modules.md](modules.md).

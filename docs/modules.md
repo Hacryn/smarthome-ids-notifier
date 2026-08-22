@@ -123,6 +123,8 @@ Serial-monitor observability, no bearing on firmware logic.
 | File | Kind | Responsibility |
 |---|---|---|
 | `SerialLog.h/.cpp` | Hardware | `logInfo`/`logWarn`/`logErr` — timestamped `Serial.printf` wrappers, called from WiFi, Clock, event detection, notification sends, rotation, and command handling. Always active. |
+| `StatusLedPolicy.h/.cpp` | Pure | Priority rule selecting one of OK/NETWORK_OR_TIME/DEGRADED/ALARM from the current WiFi/NTP/alarm/filesystem state. |
+| `StatusLed.h/.cpp` | Hardware | Drives the Nano ESP32's discrete `LED_RED`/`LED_GREEN`/`LED_BLUE` pins (active-low) per `StatusLedState`; non-blocking red blink via `millis()`. |
 
 ## Dependency direction
 

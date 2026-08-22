@@ -14,12 +14,12 @@ The pin numbers in [`src/events/EventTypes.h`](../src/events/EventTypes.h) were 
 
 ```c
 inline const EventTypeConfig EVENT_TYPES[] = {
-    {EventType::REBOOT,        "Riavvio",             "REBOOT",        -1, false, true, NotifyPolicy::INSTANT},
-    {EventType::POWER_LOSS,    "Mancanza rete 230V",  "POWER_LOSS",     4, false, true, NotifyPolicy::START_AND_END},
-    {EventType::NETWORK_ISSUE, "Problema di rete",    "NETWORK_ISSUE", -1, false, true, NotifyPolicy::ONLY_END},
-    {EventType::ALARM_GENERAL, "Allarme generale",    "ALARM_GENERAL",  5, false, true, NotifyPolicy::START_AND_END},
-    {EventType::ALARM_INTERNAL,"Allarme interno",     "ALARM_INTERNAL", 6, false, true, NotifyPolicy::START_AND_END},
-    {EventType::ALARM_GARAGE,  "Allarme garage",      "ALARM_GARAGE",   7, false, true, NotifyPolicy::START_AND_END},
+    {EventType::REBOOT,        "Riavvio",             "🔄", "REBOOT",        -1, false, true, NotifyPolicy::INSTANT},
+    {EventType::POWER_LOSS,    "Mancanza rete 230V",  "⚡", "POWER_LOSS",     4, false, true, NotifyPolicy::START_AND_END},
+    {EventType::NETWORK_ISSUE, "Problema di rete",    "📡", "NETWORK_ISSUE", -1, false, true, NotifyPolicy::ONLY_END},
+    {EventType::ALARM_GENERAL, "Allarme generale",    "🚨", "ALARM_GENERAL",  5, false, true, NotifyPolicy::START_AND_END},
+    {EventType::ALARM_INTERNAL,"Allarme interno",     "🔔", "ALARM_INTERNAL", 6, false, true, NotifyPolicy::START_AND_END},
+    {EventType::ALARM_GARAGE,  "Allarme garage",      "🚗", "ALARM_GARAGE",   7, false, true, NotifyPolicy::START_AND_END},
 };
 ```
 
@@ -33,10 +33,24 @@ A few Nano ESP32 GPIOs are strapping pins — their level at boot affects boot m
 
 | Field | Meaning |
 |---|---|
+| `emoji` | Prefixed on the type's notification/log text (see [architecture.md](architecture.md)). |
 | `pin` | GPIO number, or `-1` for internally-generated events. |
 | `active_low` | `true` if the zone's contact is `NC` (active = pin reads `LOW`), `false` if `NA` (active = pin reads `HIGH`). |
 | `enabled` | Set `false` to fully disable a type firmware-wide (no interrupt registered, nothing logged or notified) without renumbering the enum — enum values are never reassigned, so old log rows stay meaningful even if a type is later disabled. |
 | `notify_policy` | `START_AND_END`, `ONLY_END` (used by `NETWORK_ISSUE` — see [architecture.md](architecture.md)), or `INSTANT` (used by `REBOOT`). |
+
+## Status LED
+
+The Nano ESP32's built-in RGB LED (discrete `LED_RED`/`LED_GREEN`/`LED_BLUE` GPIOs, active-low — not an addressable/NeoPixel LED, so no extra library is needed) reflects overall system state at a glance, with no wiring required:
+
+| Color | Meaning |
+|---|---|
+| 🟢 Green (solid) | WiFi connected, NTP synced, no `ALARM_*`/`POWER_LOSS` event open. |
+| 🟡 Yellow (solid) | WiFi disconnected/backing off, or NTP not synced. |
+| 🔴 Red (blinking) | At least one `ALARM_*` or `POWER_LOSS` event currently open. |
+| 🟣 Purple (solid) | LittleFS degraded mode (>95% full). |
+
+Priority when multiple conditions hold: alarm > degraded > network/time > ok. See [`src/diagnostics/StatusLedPolicy.h`](../src/diagnostics/StatusLedPolicy.h) for the exact rule and [architecture.md](architecture.md) for how it's driven from `loop()`.
 
 ## Toolchain
 
