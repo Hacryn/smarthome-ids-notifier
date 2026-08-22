@@ -11,8 +11,8 @@
 // Sec. 11.2 - per-user preferences.
 struct UserConfig {
   int64_t chatId = 0;
-  std::string dateFormat = "%d-%m-%Y %H:%M:%S";             // default ISO 8601
-  TimezonePreset timezone = TimezonePreset::EUROPE_ROME;    // default UTC
+  std::string dateFormat = "%d-%m-%Y %H:%M:%S";             // default: Italian dd-mm-yyyy
+  TimezonePreset timezone = TimezonePreset::EUROPE_ROME;    // default: Europe/Rome
   std::vector<EventType> disabledTypes;                     // default: all enabled (empty)
 };
 

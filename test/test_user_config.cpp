@@ -30,8 +30,8 @@ static void test_find_or_default_returns_default_when_missing() {
   std::vector<UserConfig> configs;
   UserConfig cfg = findOrDefaultUserConfig(configs, 111111111LL);
   assert(cfg.chatId == 111111111LL);
-  assert(cfg.timezone == TimezonePreset::UTC);
-  assert(cfg.dateFormat == "%Y-%m-%dT%H:%M:%SZ");
+  assert(cfg.timezone == TimezonePreset::EUROPE_ROME);
+  assert(cfg.dateFormat == "%d-%m-%Y %H:%M:%S");
 }
 
 static void test_serialize_roundtrip() {
@@ -57,7 +57,7 @@ static void test_serialize_roundtrip() {
   assert(isNotifyEnabledForUser(parsedA, EventType::ALARM_GARAGE));
 
   UserConfig parsedB = findOrDefaultUserConfig(parsed, -1001234567890LL);
-  assert(parsedB.timezone == TimezonePreset::UTC);  // default, never set
+  assert(parsedB.timezone == TimezonePreset::EUROPE_ROME);  // default, never set
 }
 
 static void test_parse_empty_json_is_no_configs() {

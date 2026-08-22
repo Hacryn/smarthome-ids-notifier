@@ -42,8 +42,8 @@ Each authorized user manages their own via `/setdateformat`, `/settimezone`, and
 
 | Preference | Default |
 |---|---|
-| Date/time format | `%Y-%m-%dT%H:%M:%SZ` (ISO 8601) |
-| Timezone | UTC |
+| Date/time format | `%d-%m-%Y %H:%M:%S` |
+| Timezone | Europe/Rome |
 | Per-event-type notifications | all enabled |
 
 Disabling a notification type only stops *delivery to that user* — the event is still always recorded in `log.jsonl` and visible to everyone via `/log`. To disable a type system-wide instead (e.g. because it's not wired up), flip its `enabled` flag in the `EVENT_TYPES` table (see [hardware-setup.md](hardware-setup.md)) — that's a firmware-level decision, not a runtime one.
