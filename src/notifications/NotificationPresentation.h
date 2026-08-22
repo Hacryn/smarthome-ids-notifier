@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-constexpr uint32_t kGracePeriodSec = 300;    // sec. 6.4 - default 5 minutes
+constexpr uint32_t kGracePeriodSec = 60;     // sec. 6.4 - default 1 minute
 constexpr uint32_t kAggregateThreshold = 3;  // sec. 6.7 - default
 constexpr uint32_t kMaxRetries = 24;         // sec. 6.5 - default
 

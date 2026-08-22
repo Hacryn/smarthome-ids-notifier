@@ -395,7 +395,7 @@ The system therefore keeps a boolean **`scan_in_progress`** flag, set at the sta
 
 For every pending notification found by recovery, at send time the time gap between the current instant and the `ts` of the original event (in `log.jsonl`) is computed:
 
-- If the gap is **within the configured grace period** (default: **5 minutes**), the notification is sent as a **normal notification**, with no delay indication.
+- If the gap is **within the configured grace period** (default: **1 minute**), the notification is sent as a **normal notification**, with no delay indication.
 - If the gap **exceeds the grace period**, the notification is sent with an explicit prefix (e.g. "⏪ Recovered notification") and the original timestamp formatted per the recipient's format and timezone.
 - If the original timestamp carries the `a: 1` flag (section 5.4), the notification is **always** sent with the recovery prefix and with the timestamp marked `~`, regardless of the computed gap.
 
@@ -457,17 +457,18 @@ The at-risk scenario is exactly the one this design anticipates: on return from 
 
 A recovery scan (section 6.2) can find multiple pending notifications for the same user in the same cycle — typical after a prolonged network outage, where several events pile up. Sending them as separate messages, even while respecting the rate limiter in section 6.6, still produces a barely-readable burst and consumes more API calls than necessary.
 
-**Aggregation threshold** (default: **3**, configurable, `/setaggregatethreshold`): if the number of pending notifications found for a given `chat_id` in a single scan exceeds the threshold, they're grouped into **a single summary message** instead of being sent one by one:
+**Aggregation threshold** (default: **3**, configurable, `/setaggregatethreshold`): if the number of pending notifications found for a given `chat_id` in a single scan exceeds the threshold, they're grouped into **a single summary message** instead of being sent one by one — but each still uses the exact same per-event template as an ordinary live notification (section 6.1: `<emoji> <label> <start/end marker> (<ts>)`), one line per record, individually marked recovered or not per its own gap against the grace period (section 6.4):
 
 ```
-⏪ 5 recovered notifications (from 14:02 to 15:30):
-• Garage alarm — 14:02 → 14:07 (5m)
-• Mains power loss — 14:10 → 15:28 (1h 18m)
-• Reboot — 15:29
+[recuperate] 4 notifiche:
+- 🔄 Riavvio (22-08-2026 16:05:00)
+- ⏪ [recuperata] 📡 Problema di rete ▶️ (22-08-2026 16:10:12)
+- ⏪ [recuperata] 🚨 Allarme generale ▶️ (22-08-2026 16:17:54)
+- ⏪ [recuperata] 🚨 Allarme generale ✅ (22-08-2026 16:20:29)
 ```
 
 - Below the threshold, behavior remains the ordinary one from section 6.4 (one message per notification, with or without the recovery prefix depending on the grace period).
-- The aggregated message always carries the "recovered" prefix (it's by definition a grouping of delayed notifications) and reports each event with its own timestamp formatted per the recipient's preferences.
+- The aggregated message does **not** always carry the "recovered" marker: each line decides independently, exactly as in the non-aggregated case — a mix of marked and unmarked lines in the same message is expected. `START`/`END` pairs for the same event are **not** merged into an interval with a computed duration; they remain two separate lines, as in the live flow.
 - **Tracking**: aggregation is only a grouping in the formatting of the Telegram send — the state of each notification in `notif_<chat_id>.jsonl` (section 7) stays individual. If the aggregated message send succeeds, every notification in the group is marked `RESOLVED` individually; if it fails, every notification in the group stays (or returns) `PENDING`, with its own `n` counter incremented, per the ordinary rules in section 6.5.
 - Aggregation applies only within a single scan for a single user: it never merges events from different users, nor notifications found in different scans.
 

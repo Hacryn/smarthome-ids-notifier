@@ -4,6 +4,8 @@ namespace {
 // U+25B6 U+FE0F (start) / U+2705 (end) - see plan point 2.
 constexpr const char* kStartMarker = "\xE2\x96\xB6\xEF\xB8\x8F";
 constexpr const char* kEndMarker = "\xE2\x9C\x85";
+// U+23EA (rewind) - recovered-notification marker.
+constexpr const char* kRecoveredMarker = "\xE2\x8F\xAA";
 }  // namespace
 
 std::string buildEventMessageText(const char* emoji, const char* label, EventStatus status,
@@ -20,11 +22,10 @@ std::string buildEventMessageText(const char* emoji, const char* label, EventSta
   return text;
 }
 
-std::string buildRecoveryMessageText(const char* emoji, const char* label,
+std::string buildRecoveryMessageText(const char* emoji, const char* label, EventStatus status,
                                       const std::string& formattedTs, bool isRecovered) {
   std::string text;
-  if (isRecovered) text += "[recuperata] ";  // sec. 6.4
-  text += std::string(emoji) + " " + label;
-  text += " (" + formattedTs + ")";
+  if (isRecovered) text += std::string(kRecoveredMarker) + " [recuperata] ";  // sec. 6.4
+  text += buildEventMessageText(emoji, label, status, formattedTs);
   return text;
 }

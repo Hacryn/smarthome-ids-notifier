@@ -2,7 +2,6 @@
 
 #include <string.h>
 
-#include <map>
 #include <string>
 
 #include "../config/GlobalConfigStorage.h"
@@ -10,7 +9,6 @@
 #include "../config/UserConfig.h"
 #include "../config/UserConfigStorage.h"
 #include "../diagnostics/SerialLog.h"
-#include "../events/EventAggregator.h"
 #include "../events/EventLogStorage.h"
 #include "../rotation/RotationEngine.h"
 #include "../telegram/RateLimiter.h"
@@ -47,73 +45,37 @@ void setEventId(OutboundMessage& msg, const char* id) {
   msg.eventId[32] = '\0';
 }
 
-// Sec. 6.7 - groups by id, so a pending START+END pair ends up on a single
-// row with the duration, as in the document's example (same pairing logic
-// already written for /log in EventAggregator, rewritten here because it
-// operates on NotificationRecord/NotifyStatus - sec. 7.2 - instead of
-// log.jsonl's EventRecord/EventStatus).
-std::string buildAggregatedMessageText(const std::vector<NotificationRecord>& pending,
-                                        const UserConfig& userCfg) {
-  struct Group {
-    const NotificationRecord* start = nullptr;
-    const NotificationRecord* end = nullptr;
-    const NotificationRecord* instant = nullptr;
-  };
-
-  std::vector<std::string> order;  // first appearance, for stable rendering
-  std::map<std::string, Group> groups;
-
-  for (const auto& rec : pending) {
-    std::string id(rec.id);
-    if (groups.find(id) == groups.end()) order.push_back(id);
-
-    Group& g = groups[id];
-    if (rec.status == NotifyStatus::NOTIFIED_START) {
-      g.start = &rec;
-    } else if (rec.status == NotifyStatus::NOTIFIED_END) {
-      g.end = &rec;
-    } else {
-      g.instant = &rec;
-    }
-  }
-
+// Sec. 6.7 - one line per pending record, each using the exact same
+// live-notification template as the non-aggregated path (via
+// buildRecoveryMessageText), with its own individual recovered marker
+// decided by decideRecoveryPresentation - not a single all-or-nothing
+// prefix, and no START+END merging into an interval/duration. See this
+// file's plan (.plans/unify-recovery-notification-template.md) for why
+// this replaces the previous per-id grouped format.
+std::string buildAggregatedMessageText(uint32_t nowEpoch,
+                                        const std::vector<NotificationRecord>& pending,
+                                        const UserConfig& userCfg, uint32_t gracePeriodSec) {
   std::string text = "[recuperate] " + std::to_string(pending.size()) + " notifiche:\n";
-  for (const auto& id : order) {
-    const Group& g = groups[id];
-    const NotificationRecord* anyRec = g.start ? g.start : (g.end ? g.end : g.instant);
-    NotifyStatus lookupStatus = anyRec->status;
-
+  for (const auto& rec : pending) {
     EventRecord original{};
-    bool found = findEventRecordById(anyRec->id, notifyStatusToEventStatus(lookupStatus), original);
+    bool found = findEventRecordById(rec.id, notifyStatusToEventStatus(rec.status), original);
+    bool approx = found ? original.approx : true;  // not found -> err on the side of caution
     const char* label = "Evento";
     const char* emoji = "";
-    bool approx = true;
     if (found) {
       const EventTypeConfig* cfg = findEventTypeConfig(original.type);
       if (cfg) {
         label = cfg->label;
         emoji = cfg->emoji;
       }
-      approx = original.approx;
     }
-
-    text += "- ";
-    text += emoji;
-    text += " ";
-    text += label;
-    text += " ";
-    if (g.instant) {
-      text += formatTimestampForUser(g.instant->ts, userCfg, approx);
-    } else if (g.start && g.end) {
-      text += formatTimestampForUser(g.start->ts, userCfg, approx) + " -> " +
-              formatTimestampForUser(g.end->ts, userCfg, approx) + " (" +
-              formatDurationSeconds(g.end->ts - g.start->ts) + ")";
-    } else if (g.start) {
-      text += formatTimestampForUser(g.start->ts, userCfg, approx) + " -> APERTO";
-    } else {
-      text += "-> " + formatTimestampForUser(g.end->ts, userCfg, approx);
-    }
-    text += "\n";
+    RecoveryPresentation pres =
+        decideRecoveryPresentation(nowEpoch, rec.ts, approx, gracePeriodSec);
+    std::string formattedTs = formatTimestampForUser(rec.ts, userCfg, pres.isApprox);
+    text += "- " +
+            buildRecoveryMessageText(emoji, label, notifyStatusToEventStatus(rec.status),
+                                      formattedTs, pres.isRecovered) +
+            "\n";
   }
   return text;
 }
@@ -261,7 +223,8 @@ void runRecoveryScan(const std::vector<AuthorizedUser>& users, uint32_t nowMilli
 
     if (shouldAggregate(pending.size(), globalConfig().aggregateThreshold)) {
       // Sec. 6.7 - a single message; tracking stays individual per entry.
-      std::string text = buildAggregatedMessageText(pending, userCfg);
+      std::string text =
+          buildAggregatedMessageText(nowEpoch, pending, userCfg, globalConfig().gracePeriodSec);
       for (const auto& rec : pending) {
         OutboundMessage msg;
         msg.chatId = user.chatId;
@@ -294,7 +257,8 @@ void runRecoveryScan(const std::vector<AuthorizedUser>& users, uint32_t nowMilli
 
         OutboundMessage msg;
         msg.chatId = user.chatId;
-        msg.text = buildRecoveryMessageText(emoji, label, formattedTs, pres.isRecovered);
+        msg.text = buildRecoveryMessageText(emoji, label, notifyStatusToEventStatus(rec.status),
+                                             formattedTs, pres.isRecovered);
         msg.trackDelivery = true;
         msg.isScanMessage = true;
         setEventId(msg, rec.id);

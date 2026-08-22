@@ -29,7 +29,7 @@ Seven values, all admin-settable via Telegram (`/setretention`, `/setgraceperiod
 | Setting | Default | Unit |
 |---|---|---|
 | Log/notification retention | 52 | weeks |
-| Grace period | 5 | minutes |
+| Grace period | 1 | minutes |
 | Retry interval | 60 | minutes |
 | Max retries before abandoning | 24 | attempts |
 | Network-issue threshold | 120 | seconds |

@@ -26,7 +26,7 @@ Implemented in [`src/telegram/CommandRouter.cpp`](../src/telegram/CommandRouter.
 | `/listusers` | Lists every whitelisted user with their admin/standard role and cached Telegram username (`(username sconosciuto)` if never observed — see [data-model.md](data-model.md#usersjson--whitelist)). |
 | `/resetusers CONFERMA` | **Destructive.** Empties the whitelist entirely. Requires the literal confirmation word `CONFERMA` in the same message — there's no multi-step confirmation flow, by design (see [testing.md](testing.md) for why that keeps the command handler stateless). Note this also locks out whoever ran it; the whitelist is only repopulated (with the `secrets.h` onboarding admin) on the next reboot. |
 | `/setretention <weeks>` | Global log/notification retention period. Default 52. |
-| `/setgraceperiod <minutes>` | How long after an event before a recovered notification gets the "recovered" prefix. Default 5. |
+| `/setgraceperiod <minutes>` | How long after an event before a recovered notification gets the "recovered" marker. Default 1. |
 | `/setretryinterval <minutes>` | Delay before a failed notification's next scheduled retry scan. Default 60. |
 | `/setmaxretries <n>` | Failed attempts after which a pending notification is abandoned. Default 24. |
 | `/setnetthreshold <seconds>` | Minimum outage duration before a `NETWORK_ISSUE` event is logged. Default 120. |

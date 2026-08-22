@@ -12,7 +12,9 @@
 std::string buildEventMessageText(const char* emoji, const char* label, EventStatus status,
                                    const std::string& formattedTs);
 
-// Sec. 6.4 - recovered notification text, with the "[recuperata]" prefix
-// when presented as a recovery.
-std::string buildRecoveryMessageText(const char* emoji, const char* label,
+// Sec. 6.4/6.7 - reuses buildEventMessageText's exact template (so a
+// recovered notification looks identical to its live counterpart, single or
+// aggregated), prefixed with the "⏪ [recuperata]" marker when presented as
+// a recovery.
+std::string buildRecoveryMessageText(const char* emoji, const char* label, EventStatus status,
                                       const std::string& formattedTs, bool isRecovered);
