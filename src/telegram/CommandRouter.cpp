@@ -217,38 +217,85 @@ void handleLog(int64_t chatId, bool hasArg, uint32_t n) {
   reply(chatId, text);
 }
 
+// Sec. 12.2 - emoji-tagged /status blocks (plan point 4).
+constexpr const char* kUptimeEmoji = "\xF0\x9F\x95\x92";     // clock
+constexpr const char* kAlarmsEmoji = "\xF0\x9F\x9A\xA8";     // rotating light
+constexpr const char* kPowerEmoji = "\xF0\x9F\x94\x8C";      // plug
+constexpr const char* kWifiEmoji = "\xF0\x9F\x93\xB6";       // antenna bars
+constexpr const char* kNtpEmoji = "\xE2\x8F\xB1\xEF\xB8\x8F";  // stopwatch
+constexpr const char* kOpenEventsEmoji = "\xF0\x9F\x93\x82";  // open folder
+constexpr const char* kNotifEmoji = "\xF0\x9F\x94\x94";      // bell
+constexpr const char* kFsEmoji = "\xF0\x9F\x92\xBE";         // floppy disk
+constexpr const char* kRotationEmoji = "\xF0\x9F\x94\x81";   // repeat
+constexpr const char* kErrorEmoji = "\xE2\x9A\xA0\xEF\xB8\x8F";  // warning
+
+std::string formatUptime(uint32_t totalSeconds) {
+  uint32_t days = totalSeconds / 86400;
+  uint32_t hours = (totalSeconds % 86400) / 3600;
+  uint32_t minutes = (totalSeconds % 3600) / 60;
+  uint32_t seconds = totalSeconds % 60;
+  return std::to_string(days) + "g " + std::to_string(hours) + "h " + std::to_string(minutes) +
+         "m " + std::to_string(seconds) + "s";
+}
+
+// Sec. 8 - "attivo da <ts>" (open event still logged) or "normale", using
+// the debounced/logged state instead of the instantaneous pin level.
+std::string alarmStateLine(EventType type, const UserConfig& userCfg) {
+  const EventTypeConfig* cfg = findEventTypeConfig(type);
+  std::string label = cfg ? cfg->label : "Evento";
+
+  OpenEvent open{};
+  if (findOpenEventOfType(type, open)) {
+    return "- " + label + ": attivo da " + formatTimestampForUser(open.startTs, userCfg, open.approx);
+  }
+  return "- " + label + ": normale";
+}
+
 void handleStatus(int64_t chatId) {
+  std::vector<UserConfig> configs;
+  loadAllUserConfigs(configs);
+  UserConfig userCfg = findOrDefaultUserConfig(configs, chatId);
+
   std::string text;
 
-  text += "Uptime: " + std::to_string(millis() / 1000) + "s, causa ultimo riavvio: ";
+  text += kUptimeEmoji;
+  text += " Uptime: " + formatUptime(millis() / 1000) + ", causa ultimo riavvio: ";
   text += resetReasonText(esp_reset_reason());
-  text += "\n";
+  text += "\n\n";
 
-  text += "Stato pin:\n";
-  for (size_t i = 0; i < EVENT_TYPES_COUNT; i++) {
-    const EventTypeConfig& cfg = EVENT_TYPES[i];
-    if (!cfg.enabled || cfg.pin < 0) continue;
-    text += "- ";
-    text += cfg.label;
-    text += ": ";
-    text += digitalRead(cfg.pin) ? "HIGH" : "LOW";
-    text += "\n";
+  text += kAlarmsEmoji;
+  text += " Stato allarmi:\n";
+  text += alarmStateLine(EventType::ALARM_GENERAL, userCfg) + "\n";
+  text += alarmStateLine(EventType::ALARM_INTERNAL, userCfg) + "\n";
+  text += alarmStateLine(EventType::ALARM_GARAGE, userCfg) + "\n\n";
+
+  text += kPowerEmoji;
+  text += " Rete 230V: ";
+  OpenEvent powerOpen{};
+  if (findOpenEventOfType(EventType::POWER_LOSS, powerOpen)) {
+    text += "assente da " + formatTimestampForUser(powerOpen.startTs, userCfg, powerOpen.approx);
+  } else {
+    text += "presente";
   }
+  text += "\n\n";
 
-  text += "WiFi: ";
+  text += kWifiEmoji;
+  text += " WiFi: ";
   if (isWifiConnected()) {
     text += "connesso a " + wifiSsid() + ", RSSI " + std::to_string(wifiRssi()) + " dBm";
   } else {
     text += "disconnesso, tentativo di backoff #" + std::to_string(wifiCurrentBackoffAttempt());
   }
-  text += "\n";
+  text += "\n\n";
 
-  text += "Sincronizzazione oraria: ";
+  text += kNtpEmoji;
+  text += " Sincronizzazione oraria: ";
   text += isTimeSynced() ? "NTP sincronizzato" : "non sincronizzata, orario stimato dall'ancora NVS";
-  text += "\n";
+  text += "\n\n";
 
   std::vector<OpenEvent> open = detectOpenEvents();
-  text += "Eventi aperti: " + std::to_string(open.size()) + "\n";
+  text += kOpenEventsEmoji;
+  text += " Eventi aperti: " + std::to_string(open.size()) + "\n\n";
 
   uint32_t pendingCount = 0;
   uint32_t abandonedCount = 0;
@@ -262,11 +309,13 @@ void handleStatus(int64_t chatId) {
       }
     }
   }
-  text += "Notifiche pendenti: " + std::to_string(pendingCount) +
+  text += kNotifEmoji;
+  text += " Notifiche pendenti: " + std::to_string(pendingCount) +
           ", abbandonate: " + std::to_string(abandonedCount) +
-          ", timer di retry attivo: " + (isRetryTimerActive() ? "si" : "no") + "\n";
+          ", timer di retry attivo: " + (isRetryTimerActive() ? "si" : "no") + "\n\n";
 
-  text += "LittleFS: " + std::to_string(LittleFS.usedBytes()) + "/" +
+  text += kFsEmoji;
+  text += " LittleFS: " + std::to_string(LittleFS.usedBytes()) + "/" +
           std::to_string(LittleFS.totalBytes()) +
           " byte, errori di scrittura: " + std::to_string(fsErrorCounter().count());
   if (isFilesystemDegraded()) text += " (MODALITA' DEGRADATA)";
@@ -274,15 +323,20 @@ void handleStatus(int64_t chatId) {
   text += "Diagnostica LittleFS: ";
   text += filesystemHealthText();
   text += "\n";
+  text += "Overflow coda interrupt pin: " + std::to_string(pinQueueOverflowCount()) + "\n\n";
 
-  text += "Overflow coda interrupt pin: " + std::to_string(pinQueueOverflowCount()) + "\n";
+  text += kRotationEmoji;
+  uint32_t lastRotation = loadLastRotationEpoch();
+  text += " Ultima rotazione: " +
+          (lastRotation == 0 ? std::string("mai eseguita")
+                              : formatTimestampForUser(lastRotation, userCfg, false));
 
   std::string sysErr = lastSystemError();
-  if (!sysErr.empty()) text += "Ultimo errore di sistema: " + sysErr + "\n";
-
-  uint32_t lastRotation = loadLastRotationEpoch();
-  text += "Ultima rotazione: " + (lastRotation == 0 ? std::string("mai eseguita")
-                                                     : std::to_string(lastRotation));
+  if (!sysErr.empty()) {
+    text += "\n\n";
+    text += kErrorEmoji;
+    text += " Ultimo errore di sistema: " + sysErr;
+  }
 
   reply(chatId, text);
 }
