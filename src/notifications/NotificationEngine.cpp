@@ -17,6 +17,7 @@
 #include "../telegram/TelegramClient.h"
 #include "NotificationFolder.h"
 #include "NotificationLogStorage.h"
+#include "NotificationMessageText.h"
 #include "NotificationPresentation.h"
 #include "RetryTimer.h"
 
@@ -44,27 +45,6 @@ std::string g_lastSystemError;  // sec. 12.2 - exposed in /status
 void setEventId(OutboundMessage& msg, const char* id) {
   memcpy(msg.eventId, id, 32);
   msg.eventId[32] = '\0';
-}
-
-std::string buildEventMessageText(const char* label, EventStatus status,
-                                   const std::string& formattedTs) {
-  std::string text = label;
-  if (status == EventStatus::START) {
-    text += " - inizio";
-  } else if (status == EventStatus::END) {
-    text += " - fine";
-  }
-  text += " (" + formattedTs + ")";
-  return text;
-}
-
-std::string buildRecoveryMessageText(const char* label, const std::string& formattedTs,
-                                      bool isRecovered) {
-  std::string text;
-  if (isRecovered) text += "[recuperata] ";  // sec. 6.4
-  text += label;
-  text += " (" + formattedTs + ")";
-  return text;
 }
 
 // Sec. 6.7 - groups by id, so a pending START+END pair ends up on a single
@@ -106,14 +86,20 @@ std::string buildAggregatedMessageText(const std::vector<NotificationRecord>& pe
     EventRecord original{};
     bool found = findEventRecordById(anyRec->id, notifyStatusToEventStatus(lookupStatus), original);
     const char* label = "Evento";
+    const char* emoji = "";
     bool approx = true;
     if (found) {
       const EventTypeConfig* cfg = findEventTypeConfig(original.type);
-      if (cfg) label = cfg->label;
+      if (cfg) {
+        label = cfg->label;
+        emoji = cfg->emoji;
+      }
       approx = original.approx;
     }
 
     text += "- ";
+    text += emoji;
+    text += " ";
     text += label;
     text += " ";
     if (g.instant) {
@@ -232,6 +218,7 @@ void notifyEvent(const std::vector<AuthorizedUser>& users, const char* id, Event
                   EventStatus status, uint32_t eventTs, bool eventApprox) {
   const EventTypeConfig* cfg = findEventTypeConfig(type);
   const char* label = cfg ? cfg->label : "Evento";
+  const char* emoji = cfg ? cfg->emoji : "";
   NotifyStatus notifyStatus = eventStatusToNotifyStatus(status);
 
   std::vector<UserConfig> userConfigs;
@@ -247,7 +234,7 @@ void notifyEvent(const std::vector<AuthorizedUser>& users, const char* id, Event
 
     OutboundMessage msg;
     msg.chatId = user.chatId;
-    msg.text = buildEventMessageText(label, status, formattedTs);
+    msg.text = buildEventMessageText(emoji, label, status, formattedTs);
     msg.trackDelivery = true;
     setEventId(msg, id);
     msg.notifyStatus = notifyStatus;
@@ -293,9 +280,13 @@ void runRecoveryScan(const std::vector<AuthorizedUser>& users, uint32_t nowMilli
         bool found = findEventRecordById(rec.id, notifyStatusToEventStatus(rec.status), original);
         bool approx = found ? original.approx : true;  // not found -> err on the side of caution
         const char* label = "Evento";
+        const char* emoji = "";
         if (found) {
           const EventTypeConfig* cfg = findEventTypeConfig(original.type);
-          if (cfg) label = cfg->label;
+          if (cfg) {
+            label = cfg->label;
+            emoji = cfg->emoji;
+          }
         }
         RecoveryPresentation pres =
             decideRecoveryPresentation(nowEpoch, rec.ts, approx, globalConfig().gracePeriodSec);
@@ -303,7 +294,7 @@ void runRecoveryScan(const std::vector<AuthorizedUser>& users, uint32_t nowMilli
 
         OutboundMessage msg;
         msg.chatId = user.chatId;
-        msg.text = buildRecoveryMessageText(label, formattedTs, pres.isRecovered);
+        msg.text = buildRecoveryMessageText(emoji, label, formattedTs, pres.isRecovered);
         msg.trackDelivery = true;
         msg.isScanMessage = true;
         setEventId(msg, rec.id);

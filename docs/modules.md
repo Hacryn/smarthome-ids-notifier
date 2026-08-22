@@ -71,6 +71,7 @@ Delivery tracking and the recovery/retry/aggregation logic.
 | File | Kind | Responsibility |
 |---|---|---|
 | `NotificationEngine.h/.cpp` | Hardware | The outbound queue, the live-send flow, the recovery scan, admin alerting. The central orchestrator of this folder. |
+| `NotificationMessageText.h/.cpp` | Pure | Builds the live/recovered notification text (emoji + label + start/end marker + timestamp). |
 | `NotificationRecord.h/.cpp` | Pure | The `notif_<chat_id>.jsonl` schema, path formatting, (de)serialization. |
 | `NotificationFolder.h/.cpp` | Pure | Folds a stream of rows into current per-`(id,status)` state. |
 | `NotificationPresentation.h/.cpp` | Pure | Grace-period/"recovered" presentation decision, aggregation threshold, near-abandonment heuristic, max-retries check. |

@@ -31,6 +31,7 @@ enum class NotifyPolicy : uint8_t {
 struct EventTypeConfig {
   EventType type;
   const char* label;
+  const char* emoji;  // prefixed on notification/log text
   const char* commandName;  // sec. 12 - identifier used by /notify <type> on|off
   int pin;  // -1 = none (internally-generated event: REBOOT, NETWORK_ISSUE)
   bool active_low;
@@ -42,16 +43,17 @@ struct EventTypeConfig {
 // TODO(hardware): the pin numbers are placeholders, to be assigned based on
 // the real PGM wiring on the panel (sec. 2.1) before relying on this.
 inline const EventTypeConfig EVENT_TYPES[] = {
-    {EventType::REBOOT, "Riavvio", "REBOOT", -1, false, true, NotifyPolicy::INSTANT},
-    {EventType::POWER_LOSS, "Mancanza rete 230V", "POWER_LOSS", 4, false, true,
+    {EventType::REBOOT, "Riavvio", "\xF0\x9F\x94\x84", "REBOOT", -1, false, true,
+     NotifyPolicy::INSTANT},
+    {EventType::POWER_LOSS, "Mancanza rete 230V", "\xE2\x9A\xA1", "POWER_LOSS", 4, false, true,
      NotifyPolicy::START_AND_END},
-    {EventType::NETWORK_ISSUE, "Problema di rete", "NETWORK_ISSUE", -1, false, true,
-     NotifyPolicy::ONLY_END},
-    {EventType::ALARM_GENERAL, "Allarme generale", "ALARM_GENERAL", 5, false, true,
-     NotifyPolicy::START_AND_END},
-    {EventType::ALARM_INTERNAL, "Allarme interno", "ALARM_INTERNAL", 6, false, true,
-     NotifyPolicy::START_AND_END},
-    {EventType::ALARM_GARAGE, "Allarme garage", "ALARM_GARAGE", 7, false, true,
+    {EventType::NETWORK_ISSUE, "Problema di rete", "\xF0\x9F\x93\xA1", "NETWORK_ISSUE", -1, false,
+     true, NotifyPolicy::ONLY_END},
+    {EventType::ALARM_GENERAL, "Allarme generale", "\xF0\x9F\x9A\xA8", "ALARM_GENERAL", 5, false,
+     true, NotifyPolicy::START_AND_END},
+    {EventType::ALARM_INTERNAL, "Allarme interno", "\xF0\x9F\x94\x94", "ALARM_INTERNAL", 6, false,
+     true, NotifyPolicy::START_AND_END},
+    {EventType::ALARM_GARAGE, "Allarme garage", "\xF0\x9F\x9A\x97", "ALARM_GARAGE", 7, false, true,
      NotifyPolicy::START_AND_END},
 };
 constexpr size_t EVENT_TYPES_COUNT = sizeof(EVENT_TYPES) / sizeof(EVENT_TYPES[0]);
