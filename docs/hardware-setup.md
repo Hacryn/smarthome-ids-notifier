@@ -6,7 +6,7 @@ Arduino Nano ESP32 (`arduino:esp32:nano_nora`). Powered by the alarm panel itsel
 
 ## Panel wiring
 
-The Bentel panel's PGM outputs are used in **relay contact mode** (dry contact, NA/NC), wired directly to ESP32 GPIOs configured `INPUT_PULLUP`. No optoisolator is needed — the contact is already mechanically isolated from the panel's own circuitry.
+The IDS panel's PGM outputs are used in **relay contact mode** (dry contact, NA/NC), wired directly to ESP32 GPIOs configured `INPUT_PULLUP`. No optoisolator is needed — the contact is already mechanically isolated from the panel's own circuitry.
 
 ### ⚠️ Pin assignments are placeholders
 

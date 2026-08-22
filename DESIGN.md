@@ -1,4 +1,4 @@
-# Bentel Alarm Monitoring System with Telegram Notifications
+# IDS Alarm Monitoring System with Telegram Notifications
 ## Design, Requirements, and Technical Specification Document
 
 **Version:** 1.00
@@ -9,7 +9,7 @@
 
 ## 1. System objective
 
-Build a system that monitors the status of a Bentel alarm control panel via an Arduino Nano ESP32, sends real-time Telegram notifications on event open/close (alarm, reboot, network issues, power loss, etc.), and maintains a persistent, queryable historical log of events, with robust handling of connectivity and power interruptions, access restricted to authorized users, and per-user configurable preferences.
+Build a system that monitors the status of an IDS (Intrusion Detection System) alarm control panel via an Arduino Nano ESP32, sends real-time Telegram notifications on event open/close (alarm, reboot, network issues, power loss, etc.), and maintains a persistent, queryable historical log of events, with robust handling of connectivity and power interruptions, access restricted to authorized users, and per-user configurable preferences.
 
 **Note on power supply**: the Arduino will be powered by the alarm control panel, which has a backup battery in case of a power outage. Reboots due to power loss are therefore expected to be **rare events**; interruptions of **connectivity alone** (router/ISP, not necessarily on battery) remain the most plausible and frequent failure case, and are the ones the notification recovery system is primarily designed for.
 
@@ -27,11 +27,11 @@ Corollary: the system has no external observer that could notice a total failure
 
 ### 2.1 Reading alarm state
 
-The Bentel panel exposes configurable PGM (programmable) outputs usable as status indicators. **The PGMs used are configured as relay outputs (dry NA/NC contact)**: direct connection to the ESP32 pins, with no need for additional isolation, since the contact is mechanically isolated from the panel's circuitry. The reading pin must be configured as `INPUT_PULLUP`, with invertible logic depending on whether an NA or NC contact is used (`active_low` field in the table in section 3.2.1).
+The IDS panel exposes configurable PGM (programmable) outputs usable as status indicators. **The PGMs used are configured as relay outputs (dry NA/NC contact)**: direct connection to the ESP32 pins, with no need for additional isolation, since the contact is mechanically isolated from the panel's circuitry. The reading pin must be configured as `INPUT_PULLUP`, with invertible logic depending on whether an NA or NC contact is used (`active_low` field in the table in section 3.2.1).
 
 **Note on NC contacts and boot pins**: an NC contact (normally closed, opens on alarm) holds the pin at LOW at rest. If the chosen pin is an ESP32-S3 strapping pin, this resting level can interfere with the boot sequence. Where possible, an NA contact (normally open, rests at HIGH thanks to the pull-up) should therefore be preferred on any boot pins, or wiring an NC-configured zone to those specific pins should be avoided. The list of Nano ESP32 strapping pins must be checked against the official pinout when assigning pins.
 
-**Note — more event types, more physical inputs**: with the introduction of multiple event types tied to distinct contacts on the panel (internal alarm, garage alarm, power loss), it's likely that **more dedicated PGM outputs** will be needed on the panel (one per zone/condition to be monitored separately), and consequently **one ESP32 reading pin per each**. The number of digital pins available on the Nano ESP32 and the availability of configurable PGM outputs on the panel must be checked against the final number of types to be monitored. For "power loss" in particular, many Bentel panels expose a dedicated PGM for "mains fault / 230V missing", active while the system is still powered by the backup battery.
+**Note — more event types, more physical inputs**: with the introduction of multiple event types tied to distinct contacts on the panel (internal alarm, garage alarm, power loss), it's likely that **more dedicated PGM outputs** will be needed on the panel (one per zone/condition to be monitored separately), and consequently **one ESP32 reading pin per each**. The number of digital pins available on the Nano ESP32 and the availability of configurable PGM outputs on the panel must be checked against the final number of types to be monitored. For "power loss" in particular, many IDS panels expose a dedicated PGM for "mains fault / 230V missing", active while the system is still powered by the backup battery.
 
 ### 2.2 Debounce
 
