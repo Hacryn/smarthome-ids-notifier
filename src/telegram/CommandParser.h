@@ -57,3 +57,9 @@ bool parseResetNotifCommand(const std::string& text, int64_t& outChatId);
 
 // Sec. 12.3 - "/resetuserconfig <chat_id> CONFERMA".
 bool parseResetUserConfigCommand(const std::string& text, int64_t& outChatId);
+
+// Sec. 3.4.3 - "/setalarm <GENERALE|INTERNO|GARAGE> <ON|OFF>". outZoneToken
+// is the raw token, validated against ALARM_COMMANDS by the caller (not
+// here, to keep this module free of the AlarmCommandTypes dependency, same
+// separation CommandParser already keeps from EventTypes elsewhere).
+bool parseSetAlarmCommand(const std::string& text, std::string& outZoneToken, bool& outArm);

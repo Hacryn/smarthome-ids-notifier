@@ -10,6 +10,10 @@ std::string serializeEventRecord(const EventRecord& rec) {
   doc["status"] = static_cast<uint8_t>(rec.status);
   doc["ts"] = rec.ts;
   if (rec.approx) doc["a"] = 1;
+  if (rec.chatId != 0) {
+    doc["chat_id"] = rec.chatId;
+    doc["username"] = rec.username;
+  }
 
   std::string out;
   serializeJson(doc, out);
@@ -35,6 +39,11 @@ bool parseEventRecord(const std::string& line, EventRecord& out) {
   out.status = static_cast<EventStatus>(status.as<uint8_t>());
   out.ts = ts.as<uint32_t>();
   out.approx = doc["a"].as<int>() == 1;  // doc["a"] absent -> 0
+
+  JsonVariantConst chatId = doc["chat_id"];
+  out.chatId = chatId.isNull() ? 0 : chatId.as<int64_t>();
+  JsonVariantConst username = doc["username"];
+  out.username = username.isNull() ? "" : std::string(username.as<const char*>());
 
   return true;
 }

@@ -13,6 +13,7 @@
 #include "src/network/NetworkIssueTracker.h"
 #include "src/network/WifiManager.h"
 #include "src/notifications/NotificationEngine.h"
+#include "src/panelcontrol/AlarmCommandOutput.h"
 #include "src/pins/PinDebounce.h"
 #include "src/pins/PinMonitor.h"
 #include "src/rotation/FsErrorCounter.h"
@@ -197,9 +198,13 @@ void waitForNtpSyncOrTimeout(uint32_t timeoutMs) {
 }
 
 // Writes a row to the log and triggers the normal notification (sec. 6.1),
-// reused for pin events, NETWORK_ISSUE, and REBOOT: same
-// clamp+append+notify+error-alert pattern in all three cases.
-void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs) {
+// reused for pin events, NETWORK_ISSUE, REBOOT, and remote arm/disarm
+// commands: same clamp+append+notify+error-alert pattern in all cases.
+// requesterChatId/requesterUsername are only set for a remote command
+// (sec. 3.4.3) - 0/"" (the defaults) mean "not applicable", same
+// convention as the "a" field.
+void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs,
+                        int64_t requesterChatId = 0, const std::string& requesterUsername = "") {
   ClampedTimestamp clamped = applyMonotonicClamp(rawTs, g_lastWrittenTs);
 
   EventRecord rec{};
@@ -209,6 +214,8 @@ void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs) {
   // Sec. 5.4.2/5.4.3 - approximate if time isn't synced via NTP, or if the
   // monotonicity clamp fired (regardless of NTP).
   rec.approx = !isTimeSynced() || clamped.wasClamped;
+  rec.chatId = requesterChatId;
+  rec.username = requesterUsername;
 
   if (status == EventStatus::START) {
     OpenEvent existing{};
@@ -284,6 +291,9 @@ void setup() {
   // missed while setup() waits for a real clock.
   initPinMonitor();
   initStatusLed();
+  // Sec. 3.4.3 - idle LOW before any real /setalarm command could arrive
+  // (i.e. before initTelegramClient()/initCommandRouter() later below).
+  initAlarmCommandOutputs();
   StaticIpConfig staticIp{STATIC_IP_ENABLED,   STATIC_IP_ADDRESS, STATIC_IP_GATEWAY,
                            STATIC_IP_SUBNET,    STATIC_IP_DNS1,    STATIC_IP_DNS2};
   initWifi(WIFI_SSID, WIFI_PASSWORD, staticIp);
@@ -331,6 +341,7 @@ void loop() {
 
   tickWifi(nowMillis);
   tickClock(nowMillis);
+  tickAlarmCommandOutput(nowMillis);
 
   bool wifiConnected = isWifiConnected();
   if (wifiConnected && !g_wifiWasConnected) {

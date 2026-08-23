@@ -144,6 +144,24 @@ static void test_reset_userconfig_requires_chat_id_and_confirmation() {
   assert(!parseResetUserConfigCommand("/resetuserconfig CONFERMA", chatId));
 }
 
+static void test_set_alarm_command() {
+  std::string zone;
+  bool arm = false;
+  assert(parseSetAlarmCommand("/setalarm GENERALE ON", zone, arm));
+  assert(zone == "GENERALE");
+  assert(arm);
+
+  assert(parseSetAlarmCommand("/setalarm GARAGE OFF", zone, arm));
+  assert(zone == "GARAGE");
+  assert(!arm);
+
+  assert(!parseSetAlarmCommand("/setalarm GENERALE on", zone, arm));  // case-sensitive
+  assert(!parseSetAlarmCommand("/setalarm GENERALE MAYBE", zone, arm));
+  assert(!parseSetAlarmCommand("/setalarm GENERALE", zone, arm));  // missing on/off
+  assert(!parseSetAlarmCommand("/setalarm", zone, arm));            // missing everything
+  assert(!parseSetAlarmCommand("/status", zone, arm));
+}
+
 int main() {
   test_single_uint_command();
   test_single_int64_command();
@@ -158,6 +176,7 @@ int main() {
   test_reset_log_requires_confirmation_word();
   test_reset_notif_requires_chat_id_and_confirmation();
   test_reset_userconfig_requires_chat_id_and_confirmation();
+  test_set_alarm_command();
 
   printf("test_command_parser: all tests passed\n");
   return 0;

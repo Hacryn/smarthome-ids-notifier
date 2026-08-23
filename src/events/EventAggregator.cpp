@@ -39,6 +39,8 @@ void AggregatedEventLog::pushNew(const EventRecord& rec, bool isInstant) {
   ev.startApprox = rec.approx;
   ev.isInstant = isInstant;
   ev.hasEnd = false;
+  ev.chatId = rec.chatId;
+  ev.username = rec.username;
 
   ring_.push_back(ev);
   idToIter_[std::string(rec.id)] = std::prev(ring_.end());

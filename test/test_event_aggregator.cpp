@@ -87,6 +87,30 @@ static void test_orphan_end_for_evicted_id_is_ignored() {
   assert(!log.events().front().hasEnd);  // "second" stays open
 }
 
+static void test_requester_identity_carried_through() {
+  AggregatedEventLog log(10);
+  EventRecord rec{};
+  setRec(rec, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", EventType::ARM_GENERAL, EventStatus::INSTANT, 500);
+  rec.chatId = 111111111;
+  rec.username = "mario_rossi";
+  log.observe(rec);
+
+  assert(log.events().size() == 1);
+  const AggregatedEvent& ev = log.events().front();
+  assert(ev.chatId == 111111111);
+  assert(ev.username == "mario_rossi");
+}
+
+static void test_requester_identity_defaults_when_not_applicable() {
+  AggregatedEventLog log(10);
+  EventRecord rec{};
+  setRec(rec, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", EventType::REBOOT, EventStatus::INSTANT, 500);
+  log.observe(rec);
+
+  assert(log.events().front().chatId == 0);
+  assert(log.events().front().username.empty());
+}
+
 static void test_format_duration_seconds() {
   assert(formatDurationSeconds(300) == "5m");
   assert(formatDurationSeconds(1980) == "33m");
@@ -101,6 +125,8 @@ int main() {
   test_instant_event_never_has_end();
   test_ring_buffer_keeps_only_last_n();
   test_orphan_end_for_evicted_id_is_ignored();
+  test_requester_identity_carried_through();
+  test_requester_identity_defaults_when_not_applicable();
 
   printf("test_event_aggregator: all tests passed\n");
   return 0;

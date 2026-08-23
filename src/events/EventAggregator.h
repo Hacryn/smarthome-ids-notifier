@@ -22,6 +22,11 @@ struct AggregatedEvent {
   bool hasEnd;
   uint32_t endTs;
   bool endApprox;
+  // Sec. 3.4.3 - requester identity, carried straight through from the
+  // underlying EventRecord (0/"" = not applicable). No pairing concern:
+  // ARM_*/DISARM_* are always isInstant (single-row).
+  int64_t chatId = 0;
+  std::string username;
 };
 
 // Sec. 12.1 - "the file is read once, in streaming, keeping in RAM a ring

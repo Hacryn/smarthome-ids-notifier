@@ -69,6 +69,59 @@ static void test_parse_rejects_wrong_id_length() {
   assert(!parseEventRecord(line, out));
 }
 
+static void test_serialize_omits_requester_when_chat_id_zero() {
+  EventRecord rec{};
+  strcpy(rec.id, kSampleId);
+  rec.type = EventType::ARM_GENERAL;
+  rec.status = EventStatus::INSTANT;
+  rec.ts = 1755500000;
+
+  std::string json = serializeEventRecord(rec);
+  assert(json.find("chat_id") == std::string::npos);
+  assert(json.find("username") == std::string::npos);
+}
+
+static void test_serialize_includes_requester_when_set() {
+  EventRecord rec{};
+  strcpy(rec.id, kSampleId);
+  rec.type = EventType::ARM_GENERAL;
+  rec.status = EventStatus::INSTANT;
+  rec.ts = 1755500000;
+  rec.chatId = 111111111;
+  rec.username = "mario_rossi";
+
+  std::string json = serializeEventRecord(rec);
+  assert(json.find("\"chat_id\":111111111") != std::string::npos);
+  assert(json.find("\"username\":\"mario_rossi\"") != std::string::npos);
+}
+
+static void test_requester_roundtrip() {
+  EventRecord original{};
+  strcpy(original.id, kSampleId);
+  original.type = EventType::DISARM_GARAGE;
+  original.status = EventStatus::INSTANT;
+  original.ts = 1755500910;
+  original.chatId = -1001234567890;
+  original.username = "mario_rossi";
+
+  std::string json = serializeEventRecord(original);
+
+  EventRecord parsed{};
+  bool ok = parseEventRecord(json, parsed);
+  assert(ok);
+  assert(parsed.chatId == original.chatId);
+  assert(parsed.username == original.username);
+}
+
+static void test_parse_defaults_requester_when_absent() {
+  EventRecord out{};
+  std::string line =
+      "{\"id\":\"" + std::string(kSampleId) + "\",\"type\":0,\"status\":2,\"ts\":1755500000}";
+  assert(parseEventRecord(line, out));
+  assert(out.chatId == 0);
+  assert(out.username.empty());
+}
+
 static void test_event_type_table_lookup() {
   const EventTypeConfig* cfg = findEventTypeConfig(EventType::NETWORK_ISSUE);
   assert(cfg != nullptr);
@@ -108,6 +161,10 @@ int main() {
   test_parse_rejects_malformed_json();
   test_parse_rejects_missing_field();
   test_parse_rejects_wrong_id_length();
+  test_serialize_omits_requester_when_chat_id_zero();
+  test_serialize_includes_requester_when_set();
+  test_requester_roundtrip();
+  test_parse_defaults_requester_when_absent();
   test_event_type_table_lookup();
   test_event_type_lookup_by_command_name();
   test_should_notify_for_status();
