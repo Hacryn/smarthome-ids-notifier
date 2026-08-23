@@ -12,6 +12,12 @@ enum class EventType : uint8_t {
   ALARM_GENERAL = 10,
   ALARM_INTERNAL = 11,
   ALARM_GARAGE = 12,
+  ARM_GENERAL = 20,
+  DISARM_GENERAL = 21,
+  ARM_INTERNAL = 22,
+  DISARM_INTERNAL = 23,
+  ARM_GARAGE = 24,
+  DISARM_GARAGE = 25,
 };
 
 // Sec. 5.2 - status of the log row.
@@ -56,6 +62,18 @@ inline const EventTypeConfig EVENT_TYPES[] = {
      true, NotifyPolicy::START_AND_END},
     {EventType::ALARM_GARAGE, "Allarme garage", "\xF0\x9F\x9A\x97", "ALARM_GARAGE", 8, false, true,
      NotifyPolicy::START_AND_END},
+    {EventType::ARM_GENERAL, "Inserimento generale", "\xF0\x9F\x94\x92", "ARM_GENERAL", -1, false,
+     true, NotifyPolicy::INSTANT},
+    {EventType::DISARM_GENERAL, "Disinserimento generale", "\xF0\x9F\x94\x93", "DISARM_GENERAL", -1,
+     false, true, NotifyPolicy::INSTANT},
+    {EventType::ARM_INTERNAL, "Inserimento interno", "\xF0\x9F\x94\x92", "ARM_INTERNAL", -1, false,
+     true, NotifyPolicy::INSTANT},
+    {EventType::DISARM_INTERNAL, "Disinserimento interno", "\xF0\x9F\x94\x93", "DISARM_INTERNAL", -1,
+     false, true, NotifyPolicy::INSTANT},
+    {EventType::ARM_GARAGE, "Inserimento garage", "\xF0\x9F\x94\x92", "ARM_GARAGE", -1, false, true,
+     NotifyPolicy::INSTANT},
+    {EventType::DISARM_GARAGE, "Disinserimento garage", "\xF0\x9F\x94\x93", "DISARM_GARAGE", -1,
+     false, true, NotifyPolicy::INSTANT},
 };
 constexpr size_t EVENT_TYPES_COUNT = sizeof(EVENT_TYPES) / sizeof(EVENT_TYPES[0]);
 
