@@ -8,26 +8,33 @@ Arduino Nano ESP32 (`arduino:esp32:nano_nora`). Powered by the alarm panel itsel
 
 The IDS panel's PGM outputs are used in **relay contact mode** (dry contact, NA/NC), wired directly to ESP32 GPIOs configured `INPUT_PULLUP`. No optoisolator is needed — the contact is already mechanically isolated from the panel's own circuitry.
 
-### ⚠️ Pin assignments are placeholders
+### Pin assignment
 
-The pin numbers in [`src/events/EventTypes.h`](../src/events/EventTypes.h) were never assigned against real wiring — they're development placeholders:
+The pin numbers in [`src/events/EventTypes.h`](../src/events/EventTypes.h) are finalized against the real panel wiring. All four zones use `NC` (normally closed) contacts, so `active_low = true` throughout:
 
 ```c
 inline const EventTypeConfig EVENT_TYPES[] = {
     {EventType::REBOOT,        "Riavvio",             "🔄", "REBOOT",        -1, false, true, NotifyPolicy::INSTANT},
-    {EventType::POWER_LOSS,    "Mancanza rete 230V",  "⚡", "POWER_LOSS",     4, false, true, NotifyPolicy::START_AND_END},
+    {EventType::POWER_LOSS,    "Mancanza rete 230V",  "⚡", "POWER_LOSS",     6, true,  true, NotifyPolicy::START_AND_END},
     {EventType::NETWORK_ISSUE, "Problema di rete",    "📡", "NETWORK_ISSUE", -1, false, true, NotifyPolicy::ONLY_END},
-    {EventType::ALARM_GENERAL, "Allarme generale",    "🚨", "ALARM_GENERAL",  5, false, true, NotifyPolicy::START_AND_END},
-    {EventType::ALARM_INTERNAL,"Allarme interno",     "🔔", "ALARM_INTERNAL", 6, false, true, NotifyPolicy::START_AND_END},
-    {EventType::ALARM_GARAGE,  "Allarme garage",      "🚗", "ALARM_GARAGE",   7, false, true, NotifyPolicy::START_AND_END},
+    {EventType::ALARM_GENERAL, "Allarme generale",    "🚨", "ALARM_GENERAL", 12, true,  true, NotifyPolicy::START_AND_END},
+    {EventType::ALARM_INTERNAL,"Allarme interno",     "🔔", "ALARM_INTERNAL",10, true,  true, NotifyPolicy::START_AND_END},
+    {EventType::ALARM_GARAGE,  "Allarme garage",      "🚗", "ALARM_GARAGE",   8, true,  true, NotifyPolicy::START_AND_END},
 };
 ```
 
-`REBOOT` and `NETWORK_ISSUE` have `pin = -1` because they're generated internally, not from a GPIO. Before relying on this for anything real, **update the pin numbers to match your actual wiring**, then re-verify with `arduino-cli compile` and, ideally, a real transition on each pin.
+| Zone | Pin (Arduino numbering) |
+|---|---|
+| Mancanza rete 230V (`POWER_LOSS`) | `D6` |
+| Allarme generale (`ALARM_GENERAL`) | `D12` |
+| Allarme interno (`ALARM_INTERNAL`) | `D10` |
+| Allarme garage (`ALARM_GARAGE`) | `D8` |
+
+`REBOOT` and `NETWORK_ISSUE` have `pin = -1` because they're generated internally, not from a GPIO.
 
 ### Strapping pins
 
-A few Nano ESP32 GPIOs are strapping pins — their level at boot affects boot mode selection. An `NC` contact (normally closed, opens on alarm) rests `LOW`, which can interfere with boot if wired to one of those pins. Prefer wiring `NA` contacts (rest `HIGH` via the internal pull-up) to any strapping pin, or avoid wiring an `NC`-configured zone there at all. Check the official Nano ESP32 pinout for the current strapping-pin list before finalizing wiring — it's not reproduced here to avoid it going stale.
+A few Nano ESP32 GPIOs are strapping pins — their level at boot affects boot mode selection. An `NC` contact (normally closed, opens on alarm) rests `LOW`, which can interfere with boot if wired to one of those pins. Prefer wiring `NA` contacts (rest `HIGH` via the internal pull-up) to any strapping pin, or avoid wiring an `NC`-configured zone there at all. Checked against this board's strapping pins (GPIO0/3/45/46): none of the four assigned pins (`D6`/`D8`/`D10`/`D12`, GPIO9/17/21/47 respectively) are strapping pins, so no conflict and no special wiring precaution was needed for this assignment. Check the official Nano ESP32 pinout for the current strapping-pin list before changing this wiring in the future — it's not reproduced here to avoid it going stale.
 
 ### Per-type fields, if you need to change the table
 

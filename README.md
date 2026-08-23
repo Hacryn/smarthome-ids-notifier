@@ -45,7 +45,7 @@ Both pull in their own dependencies automatically (GSON, GyverHTTP, StringUtils,
 
 ### 3. Wire the alarm panel contacts
 
-The PGM outputs on the IDS panel are wired as dry relay contacts directly to ESP32 GPIOs (`INPUT_PULLUP`, no isolation needed). **The pin assignments in [src/events/EventTypes.h](src/events/EventTypes.h) are placeholders** — update them to match your actual wiring before relying on this for anything real. See [docs/hardware-setup.md](docs/hardware-setup.md) for the full wiring notes, including the strapping-pin caveat for NC contacts.
+The PGM outputs on the IDS panel are wired as dry relay contacts directly to ESP32 GPIOs (`INPUT_PULLUP`, no isolation needed). Pin assignments are in [src/events/EventTypes.h](src/events/EventTypes.h). See [docs/hardware-setup.md](docs/hardware-setup.md) for the full wiring notes, including the finalized pin assignment and the strapping-pin caveat for NC contacts.
 
 ### 4. Set the partition scheme (one-time)
 
