@@ -28,7 +28,7 @@ bool triggerAlarmCommand(const AlarmCommandConfig& cfg) {
 void tickAlarmCommandOutput(uint32_t nowMillis) {
   if (!g_pulseTimer.shouldRelease(nowMillis, kAlarmCommandPulseMs)) return;
 
-  if (g_activePin >= 0) digitalWrite(g_activePin, LOW);
+  digitalWrite(g_activePin, LOW);
   g_activePin = -1;
   g_pulseTimer.release();
 }

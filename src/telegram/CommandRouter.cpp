@@ -41,7 +41,7 @@
 // and notify through the same clamp+append+notify+error-alert path every
 // other event type already uses, instead of duplicating it.
 void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs,
-                        int64_t requesterChatId = 0, const std::string& requesterUsername = "");
+                        int64_t requesterChatId, const std::string& requesterUsername);
 
 namespace {
 
@@ -274,7 +274,10 @@ void handleSetAlarm(int64_t chatId, const std::string& username, const std::stri
     reply(chatId, "Comando gia' in corso, riprova tra un istante.");
     return;
   }
-  triggerAlarmCommand(*cfg);
+  if (!triggerAlarmCommand(*cfg)) {
+    reply(chatId, "Comando gia' in corso, riprova tra un istante.");
+    return;
+  }
   logAndNotifyEvent(cfg->loggedType, EventStatus::INSTANT, nowEpoch(), chatId, username);
 
   const EventTypeConfig* typeCfg = findEventTypeConfig(cfg->loggedType);

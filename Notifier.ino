@@ -201,10 +201,14 @@ void waitForNtpSyncOrTimeout(uint32_t timeoutMs) {
 // reused for pin events, NETWORK_ISSUE, REBOOT, and remote arm/disarm
 // commands: same clamp+append+notify+error-alert pattern in all cases.
 // requesterChatId/requesterUsername are only set for a remote command
-// (sec. 3.4.3) - 0/"" (the defaults) mean "not applicable", same
-// convention as the "a" field.
+// (sec. 3.4.3) - 0/"" means "not applicable", same convention as the "a"
+// field. No default arguments here - a function defined in a .ino with
+// default arguments trips Arduino's auto-prototype generation (it
+// duplicates the defaults into an auto-inserted prototype in the same
+// translation unit, which the compiler then rejects as a redefinition) -
+// every caller passes all 5 args explicitly instead.
 void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs,
-                        int64_t requesterChatId = 0, const std::string& requesterUsername = "") {
+                        int64_t requesterChatId, const std::string& requesterUsername) {
   ClampedTimestamp clamped = applyMonotonicClamp(rawTs, g_lastWrittenTs);
 
   EventRecord rec{};
@@ -309,7 +313,7 @@ void setup() {
 
   // Sec. 3.2/13 - REBOOT made visible on every boot (instant, always
   // notified), including one triggered by the watchdog above.
-  logAndNotifyEvent(EventType::REBOOT, EventStatus::INSTANT, currentEpoch());
+  logAndNotifyEvent(EventType::REBOOT, EventStatus::INSTANT, currentEpoch(), 0, "");
 
   initTelegramClient(TELEGRAM_BOT_TOKEN);
   initCommandRouter(g_users, g_lastWrittenTs);
@@ -336,7 +340,7 @@ void loop() {
     uint32_t rawTs = computeRetroactiveTimestamp(epochNow, nowMillis, transition.millisAtIsr);
     logInfo("Event detected: %s status=%d ts=%lu", cfg.label, static_cast<int>(status),
             static_cast<unsigned long>(rawTs));
-    logAndNotifyEvent(cfg.type, status, rawTs);
+    logAndNotifyEvent(cfg.type, status, rawTs, 0, "");
   }
 
   tickWifi(nowMillis);
@@ -359,9 +363,9 @@ void loop() {
   NetworkIssueEvent netEv = g_networkIssueTracker.update(
       reachable, nowMillis, epochNow, globalConfig().networkIssueThresholdSec);
   if (netEv.kind == NetworkIssueEvent::Kind::STARTED) {
-    logAndNotifyEvent(EventType::NETWORK_ISSUE, EventStatus::START, netEv.ts);
+    logAndNotifyEvent(EventType::NETWORK_ISSUE, EventStatus::START, netEv.ts, 0, "");
   } else if (netEv.kind == NetworkIssueEvent::Kind::ENDED) {
-    logAndNotifyEvent(EventType::NETWORK_ISSUE, EventStatus::END, netEv.ts);
+    logAndNotifyEvent(EventType::NETWORK_ISSUE, EventStatus::END, netEv.ts, 0, "");
     // Sec. 6.2 - recovery scan on connectivity restoration.
     runRecoveryScan(g_users, nowMillis, epochNow);
   }
