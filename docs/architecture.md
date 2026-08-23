@@ -35,6 +35,10 @@ Implementation: [`src/pins/PinMonitor.h`](../src/pins/PinMonitor.h) (ISR + queue
 
 The same "never block the loop" constraint applies to sending. A single alarm event can require notifying several users; rate-limiting each Telegram send to a minimum 1.1 s interval (Telegram's API limits) while doing that synchronously would stall the loop for seconds. Instead, `NotificationEngine` (see [modules.md](modules.md)) enqueues one `OutboundMessage` per recipient and drains the queue one message per loop tick, gated by a non-blocking rate limiter. This is the one significant departure from a literal reading of the original design notes, forced by the same constraint that motivates the ISR/queue split above.
 
+## Remote arm/disarm: the first output-side GPIO use
+
+`/setalarm` (see [commands.md](commands.md)) drives the panel instead of reading it — the first place in the firmware where a GPIO is written rather than sensed. It follows the same "never block the loop" rule as everything else: `AlarmCommandOutput` pulses a pin `HIGH` for 500 ms then returns it to idle `LOW` via a non-blocking `millis()`-based state machine (`AlarmPulseTimer`), ticked once per `loop()` cycle alongside the other per-cycle ticks, never via `delay()`. Only one pulse is allowed in flight system-wide; a `/setalarm` received mid-pulse is rejected with an explicit reply rather than queued. See [`src/panelcontrol/`](../src/panelcontrol/) and [modules.md](modules.md).
+
 ## Event log as the single source of truth
 
 `log.jsonl` (append-only, LittleFS) is the canonical detection record — every event is written here regardless of whether any notification about it ever succeeds. Notification delivery state is tracked separately, per recipient, in `notif_<chat_id>.jsonl` files, using an inverse log (only failed/pending deliveries are recorded — a healthy bot's file stays empty). See [data-model.md](data-model.md) for both schemas.

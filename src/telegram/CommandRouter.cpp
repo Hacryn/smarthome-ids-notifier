@@ -24,6 +24,7 @@
 #include "../notifications/NotificationFolder.h"
 #include "../notifications/NotificationLogStorage.h"
 #include "../notifications/NotificationRecord.h"
+#include "../panelcontrol/AlarmCommandOutput.h"
 #include "../pins/PinMonitor.h"
 #include "../rotation/FilesystemHealth.h"
 #include "../rotation/FsErrorCounter.h"
@@ -34,6 +35,13 @@
 #include "CommandParser.h"
 #include "HelpPaginator.h"
 #include "UnauthorizedRequestLog.h"
+
+// Sec. 3.4.3 - defined in Notifier.ino; forward-declared here (matching
+// linkage, not inside the anonymous namespace below) so /setalarm can log
+// and notify through the same clamp+append+notify+error-alert path every
+// other event type already uses, instead of duplicating it.
+void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs,
+                        int64_t requesterChatId, const std::string& requesterUsername);
 
 namespace {
 
@@ -252,6 +260,30 @@ void handleNotify(int64_t chatId, const std::string& typeName, bool enabled) {
   reply(chatId, std::string(cfg->label) + (enabled ? " abilitato." : " disabilitato."));
 }
 
+// Sec. 3.4.3 - available to any whitelisted user (not admin-gated, same
+// tier as /log). username is the same value already cached from
+// updateUsername() at dispatch time, snapshotted into the log row.
+void handleSetAlarm(int64_t chatId, const std::string& username, const std::string& zoneToken,
+                     bool arm) {
+  const AlarmCommandConfig* cfg = findAlarmCommandConfig(zoneToken.c_str(), arm);
+  if (!cfg) {
+    reply(chatId, "Zona non valida. Usa GENERALE, INTERNO o GARAGE.");
+    return;
+  }
+  if (isAlarmCommandPulseInProgress()) {
+    reply(chatId, "Comando gia' in corso, riprova tra un istante.");
+    return;
+  }
+  if (!triggerAlarmCommand(*cfg)) {
+    reply(chatId, "Comando gia' in corso, riprova tra un istante.");
+    return;
+  }
+  logAndNotifyEvent(cfg->loggedType, EventStatus::INSTANT, nowEpoch(), chatId, username);
+
+  const EventTypeConfig* typeCfg = findEventTypeConfig(cfg->loggedType);
+  reply(chatId, std::string("Comando inviato: ") + (typeCfg ? typeCfg->label : "") + ".");
+}
+
 void handleSetDateFormat(int64_t chatId, const std::string& format) {
   modifyUserConfig(chatId, [&](UserConfig& c) { c.dateFormat = format; });
   reply(chatId, "Formato data aggiornato.");
@@ -322,6 +354,10 @@ void handleLog(int64_t chatId, bool hasArg, uint32_t n) {
       } else {
         text += "APERTO";
       }
+    }
+    if (ev.chatId != 0) {
+      text += "  (richiesto da " + std::to_string(ev.chatId) + " / " +
+              (ev.username.empty() ? "sconosciuto" : "@" + ev.username) + ")";
     }
     text += "\n";
   }
@@ -524,6 +560,9 @@ std::vector<std::string> buildHelpBlocks(bool admin) {
       helpBlock("/notify &lt;type&gt; on|off",
                 "Abilita o disabilita le notifiche per un tipo di evento.",
                 "/notify ALARM_GARAGE off"),
+      helpBlock("/setalarm &lt;GENERALE|INTERNO|GARAGE&gt; &lt;ON|OFF&gt;",
+                "Inserisce o disinserisce da remoto una zona del pannello.",
+                "/setalarm GARAGE ON"),
       helpBlock("/help", "Mostra questa guida ai comandi disponibili."),
   };
 
@@ -604,8 +643,8 @@ void handleIncomingCommand(const IncomingCommand& cmd) {
     saveUsers(*g_users);
   }
 
-  std::string id, strArg, dumpTarget;
-  bool hasTs = false, hasArg = false, boolArg = false, hasChatIdArg = false;
+  std::string id, strArg, dumpTarget, zoneToken;
+  bool hasTs = false, hasArg = false, boolArg = false, hasChatIdArg = false, armArg = false;
   uint32_t uintArg = 0, tsArg = 0;
   int64_t int64Arg = 0, dumpChatId = 0;
 
@@ -621,6 +660,8 @@ void handleIncomingCommand(const IncomingCommand& cmd) {
     handleResetUsers(cmd.chatId, admin);
   } else if (parseNotifyCommand(cmd.text, strArg, boolArg)) {
     handleNotify(cmd.chatId, strArg, boolArg);
+  } else if (parseSetAlarmCommand(cmd.text, zoneToken, armArg)) {
+    handleSetAlarm(cmd.chatId, cmd.fromUsername, zoneToken, armArg);
   } else if (parseSetDateFormatCommand(cmd.text, strArg)) {
     handleSetDateFormat(cmd.chatId, strArg);
   } else if (parseSetTimezoneCommand(cmd.text, strArg)) {

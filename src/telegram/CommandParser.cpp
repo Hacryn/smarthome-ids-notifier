@@ -175,3 +175,21 @@ bool parseResetUserConfigCommand(const std::string& text, int64_t& outChatId) {
 
   return parseInt64Token(chatIdStr, outChatId);
 }
+
+bool parseSetAlarmCommand(const std::string& text, std::string& outZoneToken, bool& outArm) {
+  std::istringstream iss(text);
+  std::string command, zoneToken, onOff;
+  iss >> command;
+  if (command != "/setalarm") return false;
+  if (!(iss >> zoneToken) || !(iss >> onOff)) return false;
+
+  if (onOff == "ON") {
+    outArm = true;
+  } else if (onOff == "OFF") {
+    outArm = false;
+  } else {
+    return false;
+  }
+  outZoneToken = zoneToken;
+  return true;
+}

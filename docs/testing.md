@@ -16,7 +16,7 @@ g++ -std=c++17 -Wall -Wextra \
 
 The `-I` flag is only needed for harnesses that touch a module using `ArduinoJson` (it's a portable, non-Arduino-specific library, so it compiles fine here too). Check each test file's own includes to know which `src/*.cpp` files to compile alongside it — there's no single umbrella build script; each harness is compiled standalone as shown above with its dependencies listed explicitly.
 
-As of this writing there are 22 harnesses, roughly one per pure module (see [modules.md](modules.md) for which files are "pure"), covering debounce/timing, the retry and grace-period/aggregation decision logic, JSON schemas for all four persisted file formats, command parsing, timezone presets, the rotation ID collector, the epoch-plausibility check backing NTP-sync detection, notification message text formatting, the status LED's state-priority rule, the unauthorized-request buffer, the `/help` pagination logic, and the Telegram-reachability tracker behind `NETWORK_ISSUE` detection.
+As of this writing there are 23 harnesses, roughly one per pure module (see [modules.md](modules.md) for which files are "pure"), covering debounce/timing, the retry and grace-period/aggregation decision logic, JSON schemas for all four persisted file formats, command parsing (including `/setalarm`), timezone presets, the rotation ID collector, the epoch-plausibility check backing NTP-sync detection, notification message text formatting, the status LED's state-priority rule, the unauthorized-request buffer, the `/help` pagination logic, the Telegram-reachability tracker behind `NETWORK_ISSUE` detection, and the remote arm/disarm pulse timer (`AlarmPulseTimer`).
 
 **What this proves**: the *logic* is correct, in isolation, for the cases exercised. It says nothing about whether the logic is wired up correctly to real hardware, or whether the hardware behaves as assumed.
 
@@ -55,6 +55,7 @@ Between them, the two checks above verify every line of code compiles and every 
 - NTP actually syncing, and DST transitions actually working, against real time servers.
 - Telegram message delivery, inline button callbacks, and command handling against the real Bot API.
 - The Task Watchdog actually resetting the device on a genuine hang.
+- `/setalarm` actually pulsing the correct physical pin for ~500 ms and returning to idle `LOW` (see [`.plans/remote-alarm-arm-disarm.md`](../.plans/remote-alarm-arm-disarm.md#verification) for the manual per-zone/action checklist).
 
 If you don't want to wire the device to the real alarm panel (or a breadboard) just to exercise the pin-event path, the cheapest option is a temporary debug command that injects a simulated transition directly into the pipeline downstream of the ISR — this tests everything from debounce onward (logging, notification, `/log`, open-event handling) without touching a GPIO, at the cost of not exercising the ISR/interrupt path itself. This isn't currently implemented in the tree; ask if you want it added.
 

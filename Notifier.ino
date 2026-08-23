@@ -13,6 +13,7 @@
 #include "src/network/NetworkIssueTracker.h"
 #include "src/network/WifiManager.h"
 #include "src/notifications/NotificationEngine.h"
+#include "src/panelcontrol/AlarmCommandOutput.h"
 #include "src/pins/PinDebounce.h"
 #include "src/pins/PinMonitor.h"
 #include "src/rotation/FsErrorCounter.h"
@@ -197,9 +198,17 @@ void waitForNtpSyncOrTimeout(uint32_t timeoutMs) {
 }
 
 // Writes a row to the log and triggers the normal notification (sec. 6.1),
-// reused for pin events, NETWORK_ISSUE, and REBOOT: same
-// clamp+append+notify+error-alert pattern in all three cases.
-void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs) {
+// reused for pin events, NETWORK_ISSUE, REBOOT, and remote arm/disarm
+// commands: same clamp+append+notify+error-alert pattern in all cases.
+// requesterChatId/requesterUsername are only set for a remote command
+// (sec. 3.4.3) - 0/"" means "not applicable", same convention as the "a"
+// field. No default arguments here - a function defined in a .ino with
+// default arguments trips Arduino's auto-prototype generation (it
+// duplicates the defaults into an auto-inserted prototype in the same
+// translation unit, which the compiler then rejects as a redefinition) -
+// every caller passes all 5 args explicitly instead.
+void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs,
+                        int64_t requesterChatId, const std::string& requesterUsername) {
   ClampedTimestamp clamped = applyMonotonicClamp(rawTs, g_lastWrittenTs);
 
   EventRecord rec{};
@@ -209,6 +218,8 @@ void logAndNotifyEvent(EventType type, EventStatus status, uint32_t rawTs) {
   // Sec. 5.4.2/5.4.3 - approximate if time isn't synced via NTP, or if the
   // monotonicity clamp fired (regardless of NTP).
   rec.approx = !isTimeSynced() || clamped.wasClamped;
+  rec.chatId = requesterChatId;
+  rec.username = requesterUsername;
 
   if (status == EventStatus::START) {
     OpenEvent existing{};
@@ -284,6 +295,9 @@ void setup() {
   // missed while setup() waits for a real clock.
   initPinMonitor();
   initStatusLed();
+  // Sec. 3.4.3 - idle LOW before any real /setalarm command could arrive
+  // (i.e. before initTelegramClient()/initCommandRouter() later below).
+  initAlarmCommandOutputs();
   StaticIpConfig staticIp{STATIC_IP_ENABLED,   STATIC_IP_ADDRESS, STATIC_IP_GATEWAY,
                            STATIC_IP_SUBNET,    STATIC_IP_DNS1,    STATIC_IP_DNS2};
   initWifi(WIFI_SSID, WIFI_PASSWORD, staticIp);
@@ -299,7 +313,7 @@ void setup() {
 
   // Sec. 3.2/13 - REBOOT made visible on every boot (instant, always
   // notified), including one triggered by the watchdog above.
-  logAndNotifyEvent(EventType::REBOOT, EventStatus::INSTANT, currentEpoch());
+  logAndNotifyEvent(EventType::REBOOT, EventStatus::INSTANT, currentEpoch(), 0, "");
 
   initTelegramClient(TELEGRAM_BOT_TOKEN);
   initCommandRouter(g_users, g_lastWrittenTs);
@@ -326,11 +340,12 @@ void loop() {
     uint32_t rawTs = computeRetroactiveTimestamp(epochNow, nowMillis, transition.millisAtIsr);
     logInfo("Event detected: %s status=%d ts=%lu", cfg.label, static_cast<int>(status),
             static_cast<unsigned long>(rawTs));
-    logAndNotifyEvent(cfg.type, status, rawTs);
+    logAndNotifyEvent(cfg.type, status, rawTs, 0, "");
   }
 
   tickWifi(nowMillis);
   tickClock(nowMillis);
+  tickAlarmCommandOutput(nowMillis);
 
   bool wifiConnected = isWifiConnected();
   if (wifiConnected && !g_wifiWasConnected) {
@@ -348,9 +363,9 @@ void loop() {
   NetworkIssueEvent netEv = g_networkIssueTracker.update(
       reachable, nowMillis, epochNow, globalConfig().networkIssueThresholdSec);
   if (netEv.kind == NetworkIssueEvent::Kind::STARTED) {
-    logAndNotifyEvent(EventType::NETWORK_ISSUE, EventStatus::START, netEv.ts);
+    logAndNotifyEvent(EventType::NETWORK_ISSUE, EventStatus::START, netEv.ts, 0, "");
   } else if (netEv.kind == NetworkIssueEvent::Kind::ENDED) {
-    logAndNotifyEvent(EventType::NETWORK_ISSUE, EventStatus::END, netEv.ts);
+    logAndNotifyEvent(EventType::NETWORK_ISSUE, EventStatus::END, netEv.ts, 0, "");
     // Sec. 6.2 - recovery scan on connectivity restoration.
     runRecoveryScan(g_users, nowMillis, epochNow);
   }

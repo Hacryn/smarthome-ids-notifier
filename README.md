@@ -7,6 +7,7 @@ Full requirements and design rationale live in [DESIGN.md](DESIGN.md). This READ
 ## Features
 
 - Real-time Telegram notifications for alarms, reboots, power loss (PGM contact), and network outages — interrupt-driven, so no transition is lost even while the firmware is blocked on a network call.
+- Remote arm/disarm (`/setalarm`): any whitelisted user can arm or disarm a zone directly from Telegram; every use is logged and notified like any other event, with the requester attached.
 - Persistent event log (`log.jsonl`) and per-user notification delivery tracking, with automatic retry, grace-period-aware "recovered" notices, and message aggregation after a long outage.
 - Multi-user whitelist with an admin/standard permission split, managed entirely via Telegram commands.
 - Per-user timezone, date format, and per-event-type notification preferences.

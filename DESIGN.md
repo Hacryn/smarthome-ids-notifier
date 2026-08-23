@@ -72,8 +72,14 @@ The system must support multiple event types, extensible in the future. Each typ
 | `10` | `ALARM_GENERAL` — general alarm | Has duration (`START`/`END`) | `START` and `END` |
 | `11` | `ALARM_INTERNAL` — internal alarm | Has duration (`START`/`END`) | `START` and `END` |
 | `12` | `ALARM_GARAGE` — garage alarm | Has duration (`START`/`END`) | `START` and `END` |
+| `20` | `ARM_GENERAL` — remote arm, general zone (see section 16) | Instant (`INSTANT`) | `INSTANT` |
+| `21` | `DISARM_GENERAL` — remote disarm, general zone | Instant (`INSTANT`) | `INSTANT` |
+| `22` | `ARM_INTERNAL` — remote arm, internal zone | Instant (`INSTANT`) | `INSTANT` |
+| `23` | `DISARM_INTERNAL` — remote disarm, internal zone | Instant (`INSTANT`) | `INSTANT` |
+| `24` | `ARM_GARAGE` — remote arm, garage zone | Instant (`INSTANT`) | `INSTANT` |
+| `25` | `DISARM_GARAGE` — remote disarm, garage zone | Instant (`INSTANT`) | `INSTANT` |
 
-*(other types can be appended to the enumeration, without breaking compatibility with existing logs — never reuse/renumber values already assigned)*
+*(other types can be appended to the enumeration, without breaking compatibility with existing logs — never reuse/renumber values already assigned; values `13`-`19` are deliberately left open for future physically-sensed types)*
 
 #### 3.2.1 Type configuration table
 
@@ -709,7 +715,7 @@ The timezone is a **personal preference** saved in `userconfig.json` (section 4.
 | Parameter | Default | Command |
 |---|---|---|
 | Event/notification log validity period | 52 weeks | `/setretention <weeks>` |
-| Notification recovery grace period | 5 minutes | `/setgraceperiod <minutes>` |
+| Notification recovery grace period | 1 minute | `/setgraceperiod <minutes>` |
 | Scheduled retry interval | 60 minutes | `/setretryinterval <minutes>` |
 | Maximum number of attempts before giving up | 24 | `/setmaxretries <n>` |
 | Duration threshold to generate `NETWORK_ISSUE` | 120 seconds | `/setnetthreshold <seconds>` |
@@ -740,6 +746,7 @@ Service NVS keys, not modifiable by command: `schema_ver` (5.5), `last_epoch` (5
 | `/setdateformat <format>` | Authorized user | Sets their own date/time display format |
 | `/settimezone <preset>` | Authorized user | Sets their own timezone from a predefined set |
 | `/notify <event_type> on\|off` | Authorized user | Enables/disables the notification for one event type, for themselves |
+| `/setalarm <GENERALE\|INTERNO\|GARAGE> <ON\|OFF>` | Authorized user | Arms/disarms a zone remotely, by pulsing the matching output pin — see section 16 |
 | `/setretention <weeks>` | Admin | Sets the global log validity period in weeks |
 | `/setgraceperiod <minutes>` | Admin | Sets the global grace period for notification recovery |
 | `/setretryinterval <minutes>` | Admin | Sets the global scheduled-retry interval |
@@ -858,9 +865,39 @@ Internal alarm        19/08 08:30 → OPEN
 | `/log` rendering | Aggregated events with duration (`14:02 → 14:07, 5m`), ring buffer of the last N events |
 | Timezone | Set of predefined presets mapped to POSIX TZ strings (UTC, Europe/Rome, Europe/Berlin, Europe/London, Europe/Moscow, America/New_York, America/Los_Angeles), automatic DST handling, default UTC, per-user preference |
 | Power | Supplied by the panel (with backup battery): blackout reboots rare, network interruptions more likely |
+| Remote arm/disarm | `/setalarm <zone> <ON\|OFF>`, available to any whitelisted user (not admin-gated); a dedicated `OUTPUT` pin per zone/action pulsed `HIGH` for 500 ms, one command in flight system-wide; logged as `INSTANT` events (types `20`-`25`) carrying the requester's `chat_id`/username — see section 16 |
 
 ---
 
 ## 15. Next steps
 
-- Evaluate (optional, discussed separately) introducing commands to arm/disarm the alarm remotely — requires verifying hardware support on the panel and a careful additional security analysis before being formalized in this document.
+*(the remote arm/disarm capability once evaluated here is now formalized in section 16)*
+
+---
+
+## 16. Remote alarm arm/disarm
+
+### 16.1 Motivation and scope
+
+The firmware originally only *read* the panel's alarm/power-loss state (section 2.1). This section adds the first output-side capability: a `/setalarm <GENERALE|INTERNO|GARAGE> <ON|OFF>` command that *drives* the panel to arm/disarm a zone remotely, available to any whitelisted user (not admin-gated, same tier as `/log`), with every use logged and notified like any other event.
+
+### 16.2 Signal shape and pin assignment
+
+Each of the 6 actions (arm/disarm × 3 zones) has its own dedicated `OUTPUT` pin, idling `LOW` (holding GND) and pulsing `HIGH` for 500 ms to issue a command — mirroring a keyswitch-zone input on the panel, the same physical mechanism as the read-side zones (section 2.1) but with the ESP32 on the driving end. See [hardware-setup.md](docs/hardware-setup.md#remote-armdisarm-output-pins) for the pin table; none of the 6 pins overlap the read-side pins or the status LEDs.
+
+### 16.3 New event types
+
+`ARM_GENERAL`/`DISARM_GENERAL`/`ARM_INTERNAL`/`DISARM_INTERNAL`/`ARM_GARAGE`/`DISARM_GARAGE` (values `20`-`25`, gap `13`-`19` left open for future physically-sensed types) are `INSTANT` events — one log row per request, like `REBOOT` — not `START`/`END` pairs: this isn't modeled as a duration/open-event (no "currently armed" tracking, no `APERTO` state), the simplest fit for "one request = one fact to notify/log". `pin = -1` in `EVENT_TYPES` (section 3.2.1) since these aren't ISR-read inputs; the physical output pins are driven by a completely separate path (section 16.2), never touching the debounce loop.
+
+### 16.4 Requester audit trail
+
+Every `log.jsonl` row generated by a remote command carries the requester's `chat_id` and a username snapshot (taken at request time, not re-resolved later), using the same "omit when not applicable" convention already established for the `a` field (section 5.2) — merged directly into the existing schema rather than a separate file, so `/log` (visible to any whitelisted user) shows the requester inline with no new storage module, no join-by-`id`, and no separate retention/rotation work.
+
+### 16.5 Operational limits (deliberately accepted)
+
+- **One command in flight at a time, system-wide**: a `/setalarm` received while a previous command's pulse hasn't finished yet is rejected with an explicit reply rather than queued or run concurrently — simplest safe behavior, and 500 ms is short enough that a collision should be rare.
+- **No arm/disarm success feedback**: the panel has no pin reporting back "now armed"/"now disarmed" in this scope, so the notification/log only confirms the command was sent, not that the panel's state actually changed — the same kind of accepted limitation as the "no automatic external health check" note in section 13.
+
+### 16.6 Access-control rationale
+
+`/setalarm` is deliberately *not* admin-gated and has no `CONFERMA` confirmation step, unlike the destructive commands in section 12.3 (`/resetlog`, `/resetnotif`, `/resetuserconfig`). The two are not comparable: the `CONFERMA`-protected commands cause irreversible data loss (log/config rows gone for good), whereas an arm/disarm command is trivially reversible — a wrong `/setalarm` is undone by sending the opposite command — and, per section 16.4, every use is permanently attributed to a specific `chat_id`/username in `log.jsonl` and surfaced to every whitelisted user via `/log`, giving full after-the-fact accountability. Whitelisting itself (section 4) remains the actual access boundary: only chat IDs an admin has explicitly authorized can issue the command at all.
