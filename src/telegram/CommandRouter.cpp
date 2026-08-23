@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <LittleFS.h>
+#include <WiFi.h>
 #include <esp_system.h>
 
 #include <algorithm>
@@ -394,7 +395,9 @@ void handleStatus(int64_t chatId) {
   text += kWifiEmoji;
   text += " WiFi: ";
   if (isWifiConnected()) {
-    text += "connesso a " + wifiSsid() + ", RSSI " + std::to_string(wifiRssi()) + " dBm";
+    text += "connesso a " + wifiSsid() + ", RSSI " + std::to_string(wifiRssi()) + " dBm, IP " +
+            std::string(WiFi.localIP().toString().c_str()) + " (" +
+            (isStaticIpActive() ? "statico" : "DHCP") + ")";
   } else {
     text += "disconnesso, tentativo di backoff #" + std::to_string(wifiCurrentBackoffAttempt());
   }

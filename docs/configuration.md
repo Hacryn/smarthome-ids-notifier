@@ -10,6 +10,14 @@ Copied from [`secrets.h.example`](../secrets.h.example) and filled in before the
 #define WIFI_SSID "your-wifi-ssid"
 #define WIFI_PASSWORD "your-wifi-password"
 
+// Static IP (optional, alternative to DHCP)
+#define STATIC_IP_ENABLED false
+#define STATIC_IP_ADDRESS "192.168.1.50"
+#define STATIC_IP_GATEWAY "192.168.1.1"
+#define STATIC_IP_SUBNET "255.255.255.0"
+#define STATIC_IP_DNS1 "192.168.1.1"
+#define STATIC_IP_DNS2 ""  // optional, leave empty to configure only one DNS server
+
 #define TELEGRAM_BOT_TOKEN "123456789:AAExampleTokenReplaceMe"
 
 // Initial chat_id, automatically promoted to admin on first boot
@@ -17,6 +25,8 @@ Copied from [`secrets.h.example`](../secrets.h.example) and filled in before the
 ```
 
 `secrets.h` is `.gitignore`d — only `secrets.h.example` (with placeholder values) is committed, so a clean checkout fails to compile with a clear error rather than silently building with bogus credentials.
+
+`STATIC_IP_ENABLED` (default `false`) opts into a static IP instead of DHCP. When enabled, `STATIC_IP_ADDRESS`/`STATIC_IP_GATEWAY`/`STATIC_IP_SUBNET`/`STATIC_IP_DNS1` are all required — if any is missing or not a valid dotted-decimal address, the firmware logs a warning and falls back to DHCP rather than starting with a half-applied configuration. `STATIC_IP_DNS2` is optional (leave it empty for a single DNS server); an invalid `STATIC_IP_DNS2` alone doesn't trigger the DHCP fallback, just a warning and `STATIC_IP_DNS1` still applying. `/status` shows the assigned IP and whether it's static or DHCP (see [commands.md](commands.md)).
 
 `ONBOARDING_CHAT_ID` only matters once: on the very first boot, if `users.json` is empty or missing, that chat ID is automatically added as the first admin. After that, whitelist management happens entirely through Telegram commands (`/adduser`, `/promoteuser`, etc. — see [commands.md](commands.md)) or by editing `users.json` directly on the device.
 

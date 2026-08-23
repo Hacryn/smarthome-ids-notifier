@@ -284,7 +284,9 @@ void setup() {
   // missed while setup() waits for a real clock.
   initPinMonitor();
   initStatusLed();
-  initWifi(WIFI_SSID, WIFI_PASSWORD);
+  StaticIpConfig staticIp{STATIC_IP_ENABLED,   STATIC_IP_ADDRESS, STATIC_IP_GATEWAY,
+                           STATIC_IP_SUBNET,    STATIC_IP_DNS1,    STATIC_IP_DNS2};
+  initWifi(WIFI_SSID, WIFI_PASSWORD, staticIp);
 
   // Sec. 13 - bounded wait for a real NTP sync (see waitForNtpSyncOrTimeout
   // above) so REBOOT below can get a real timestamp instead of always being
