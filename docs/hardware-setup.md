@@ -10,16 +10,16 @@ The IDS panel's PGM outputs are used in **relay contact mode** (dry contact, NA/
 
 ### Pin assignment
 
-The pin numbers in [`src/events/EventTypes.h`](../src/events/EventTypes.h) are finalized against the real panel wiring. All four zones use `NC` (normally closed) contacts, so `active_low = true` throughout:
+The pin numbers in [`src/events/EventTypes.h`](../src/events/EventTypes.h) are finalized against the real panel wiring. All four zones rest connected to GND (pin reads `LOW`) and disconnect from GND on alarm (pin pulled `HIGH` by `INPUT_PULLUP`), so `active_low = false` throughout — note this is the opposite of what the "NC" (normally closed) label commonly implies; what matters for this codebase's `active_low` convention is the resulting pin level, not the contact-position label:
 
 ```c
 inline const EventTypeConfig EVENT_TYPES[] = {
     {EventType::REBOOT,        "Riavvio",             "🔄", "REBOOT",        -1, false, true, NotifyPolicy::INSTANT},
-    {EventType::POWER_LOSS,    "Mancanza rete 230V",  "⚡", "POWER_LOSS",     6, true,  true, NotifyPolicy::START_AND_END},
+    {EventType::POWER_LOSS,    "Mancanza rete 230V",  "⚡", "POWER_LOSS",     6, false, true, NotifyPolicy::START_AND_END},
     {EventType::NETWORK_ISSUE, "Problema di rete",    "📡", "NETWORK_ISSUE", -1, false, true, NotifyPolicy::ONLY_END},
-    {EventType::ALARM_GENERAL, "Allarme generale",    "🚨", "ALARM_GENERAL", 12, true,  true, NotifyPolicy::START_AND_END},
-    {EventType::ALARM_INTERNAL,"Allarme interno",     "🔔", "ALARM_INTERNAL",10, true,  true, NotifyPolicy::START_AND_END},
-    {EventType::ALARM_GARAGE,  "Allarme garage",      "🚗", "ALARM_GARAGE",   8, true,  true, NotifyPolicy::START_AND_END},
+    {EventType::ALARM_GENERAL, "Allarme generale",    "🚨", "ALARM_GENERAL", 12, false, true, NotifyPolicy::START_AND_END},
+    {EventType::ALARM_INTERNAL,"Allarme interno",     "🔔", "ALARM_INTERNAL",10, false, true, NotifyPolicy::START_AND_END},
+    {EventType::ALARM_GARAGE,  "Allarme garage",      "🚗", "ALARM_GARAGE",   8, false, true, NotifyPolicy::START_AND_END},
 };
 ```
 
@@ -34,7 +34,7 @@ inline const EventTypeConfig EVENT_TYPES[] = {
 
 ### Strapping pins
 
-A few Nano ESP32 GPIOs are strapping pins — their level at boot affects boot mode selection. An `NC` contact (normally closed, opens on alarm) rests `LOW`, which can interfere with boot if wired to one of those pins. Prefer wiring `NA` contacts (rest `HIGH` via the internal pull-up) to any strapping pin, or avoid wiring an `NC`-configured zone there at all. Checked against this board's strapping pins (GPIO0/3/45/46): none of the four assigned pins (`D6`/`D8`/`D10`/`D12`, GPIO9/17/21/47 respectively) are strapping pins, so no conflict and no special wiring precaution was needed for this assignment. Check the official Nano ESP32 pinout for the current strapping-pin list before changing this wiring in the future — it's not reproduced here to avoid it going stale.
+A few Nano ESP32 GPIOs are strapping pins — their level at boot affects boot mode selection. A contact resting connected to GND (pin reads `LOW`) can interfere with boot if wired to one of those pins. Prefer wiring a contact that rests disconnected (pin reads `HIGH` via the internal pull-up) to any strapping pin, or avoid wiring a GND-at-rest zone there at all. Checked against this board's strapping pins (GPIO0/3/45/46): none of the four assigned pins (`D6`/`D8`/`D10`/`D12`, GPIO9/17/21/47 respectively) are strapping pins, so no conflict and no special wiring precaution was needed for this assignment — the rest level is `LOW` on all four pins regardless of the `active_low` value above, which is what this check depends on. Check the official Nano ESP32 pinout for the current strapping-pin list before changing this wiring in the future — it's not reproduced here to avoid it going stale.
 
 ### Per-type fields, if you need to change the table
 

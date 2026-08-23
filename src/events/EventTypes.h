@@ -41,19 +41,20 @@ struct EventTypeConfig {
 
 // Sec. 3.2.1 - the single source of truth for the type -> behavior mapping.
 // Pin assignments finalized against the real panel wiring (see
-// docs/hardware-setup.md); all four zones use NC contacts.
+// docs/hardware-setup.md): all four zones rest connected to GND and
+// disconnect (pin pulled HIGH) on alarm.
 inline const EventTypeConfig EVENT_TYPES[] = {
     {EventType::REBOOT, "Riavvio", "\xF0\x9F\x94\x84", "REBOOT", -1, false, true,
      NotifyPolicy::INSTANT},
-    {EventType::POWER_LOSS, "Mancanza rete 230V", "\xE2\x9A\xA1", "POWER_LOSS", 6, true, true,
+    {EventType::POWER_LOSS, "Mancanza rete 230V", "\xE2\x9A\xA1", "POWER_LOSS", 6, false, true,
      NotifyPolicy::START_AND_END},
     {EventType::NETWORK_ISSUE, "Problema di rete", "\xF0\x9F\x93\xA1", "NETWORK_ISSUE", -1, false,
      true, NotifyPolicy::ONLY_END},
-    {EventType::ALARM_GENERAL, "Allarme generale", "\xF0\x9F\x9A\xA8", "ALARM_GENERAL", 12, true,
+    {EventType::ALARM_GENERAL, "Allarme generale", "\xF0\x9F\x9A\xA8", "ALARM_GENERAL", 12, false,
      true, NotifyPolicy::START_AND_END},
-    {EventType::ALARM_INTERNAL, "Allarme interno", "\xF0\x9F\x94\x94", "ALARM_INTERNAL", 10, true,
+    {EventType::ALARM_INTERNAL, "Allarme interno", "\xF0\x9F\x94\x94", "ALARM_INTERNAL", 10, false,
      true, NotifyPolicy::START_AND_END},
-    {EventType::ALARM_GARAGE, "Allarme garage", "\xF0\x9F\x9A\x97", "ALARM_GARAGE", 8, true, true,
+    {EventType::ALARM_GARAGE, "Allarme garage", "\xF0\x9F\x9A\x97", "ALARM_GARAGE", 8, false, true,
      NotifyPolicy::START_AND_END},
 };
 constexpr size_t EVENT_TYPES_COUNT = sizeof(EVENT_TYPES) / sizeof(EVENT_TYPES[0]);
