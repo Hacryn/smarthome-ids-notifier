@@ -46,6 +46,23 @@ A few Nano ESP32 GPIOs are strapping pins — their level at boot affects boot m
 | `enabled` | Set `false` to fully disable a type firmware-wide (no interrupt registered, nothing logged or notified) without renumbering the enum — enum values are never reassigned, so old log rows stay meaningful even if a type is later disabled. |
 | `notify_policy` | `START_AND_END`, `ONLY_END` (used by `NETWORK_ISSUE` — see [architecture.md](architecture.md)), or `INSTANT` (used by `REBOOT`). |
 
+## Remote arm/disarm output pins
+
+The `/setalarm` command (see [commands.md](commands.md)) drives 6 dedicated `OUTPUT` pins to issue arm/disarm commands to the panel, one per action — the first output-side GPIO use in this project (everything above is `INPUT_PULLUP` reads). Each pin idles `LOW` (holding GND) and pulses `HIGH` for 500 ms to issue a command, mirroring a keyswitch-zone input on the panel. See [`src/panelcontrol/AlarmCommandTypes.h`](../src/panelcontrol/AlarmCommandTypes.h) for the mapping and [`src/panelcontrol/AlarmCommandOutput.h`](../src/panelcontrol/AlarmCommandOutput.h) for the pulse driving logic.
+
+| Action | Zone | Pin (Arduino numbering) |
+|---|---|---|
+| Inserimento (arm) | Generale | `A0` |
+| Inserimento (arm) | Interno | `A1` |
+| Inserimento (arm) | Garage | `A2` |
+| Disinserimento (disarm) | Generale | `A5` |
+| Disinserimento (disarm) | Interno | `A6` |
+| Disinserimento (disarm) | Garage | `A7` |
+
+None of these pins overlap the read-side `D6`/`D8`/`D10`/`D12` pins (different pin namespace) or `LED_BUILTIN`/the RGB status LED. `A4`/`A5` alias I2C `SDA`/`SCL`, unused in this project — the same kind of incidental pin reuse already accepted for `D10`(`SS`)/`D12`(`MISO`) on the read side.
+
+Only one command is in flight at a time, system-wide: a `/setalarm` received while a previous command's pulse hasn't finished yet is rejected with an explicit reply rather than queued or run concurrently. The panel has no pin reporting back "now armed"/"now disarmed", so the notification/log only confirms the command was sent, not that the panel actually changed state — same kind of accepted limitation as the "no automatic external health check" note in [architecture.md](architecture.md#known-deliberately-accepted-limitations).
+
 ## Status LED
 
 The Nano ESP32's built-in RGB LED (discrete `LED_RED`/`LED_GREEN`/`LED_BLUE` GPIOs, active-low — not an addressable/NeoPixel LED, so no extra library is needed) reflects overall system state at a glance, with no wiring required:

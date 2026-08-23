@@ -21,6 +21,16 @@ The event log itself: types, schema, storage, and the two derived views built on
 | `OpenEventsTracker.h/.cpp` | Pure | Given a stream of log rows, finds events with a `START` but no matching `END` ("open" events) and selects the most recent open event of a requested type. |
 | `OpenEventsManager.h/.cpp` | Hardware | Detects open events from the real log, resolves the ID to reuse for an `END`, closes one (verifying it's still open, to guard against a double-click or a duplicate `/closeevent`), and sends the open-events summary (with inline "close" buttons for admins). |
 
+## `src/panelcontrol/`
+
+Driving the panel's arm/disarm inputs remotely — a distinct concern from `src/pins/` (reading the panel's outputs), the output-side counterpart to it.
+
+| File | Kind | Responsibility |
+|---|---|---|
+| `AlarmCommandTypes.h` | Pure | The `/setalarm` argument → pin/`EventType` mapping — the output-side analogue of `EVENT_TYPES`. |
+| `AlarmPulseTimer.h/.cpp` | Pure | Non-blocking idle-LOW/pulse-HIGH state machine timing the 500 ms command pulse. |
+| `AlarmCommandOutput.h/.cpp` | Hardware | Owns the 6 output pins, drives the pulse, enforces one command in flight at a time. |
+
 ## `src/pins/`
 
 The ISR/debounce layer described in [architecture.md](architecture.md).
